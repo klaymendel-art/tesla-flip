@@ -48,6 +48,7 @@ const CFG = {
   IDLE: { hz: 1.6, knees: 0.02 },   // riding idle: knee bob (rider squash) at 1.6 Hz, ~±2 px of head travel
   WHEELS: [{ x: 142, y: 201, r: 80 }, { x: 716, y: 201, r: 80 }],  // tyre centres/radii in tesla_side px (measured; wheel bottom row 281)
   WHEEL_AIR_SPIN: 0.6,          // wheels keep spinning a bit slower in the air
+  WHEEL_MAX_RAD_S: 10,          // visual spin cap: the true rate (~34 rad/s) strobes with multi-spoke rims at 60 fps
   TILT_Z: 8 * Math.PI / 180,
   LEAN: 9 * Math.PI / 180,
   SQUASH: { ms: 80, x: 1.12, y: 0.9 },
@@ -561,7 +562,7 @@ function update(dt) {
   if (G.shakeT > 0) G.shakeT -= dt * 1000;
   if (G.btnT > 0) G.btnT -= dt * 1000;
   if (G.state !== 'crash' && G.state !== 'over') {                     // wheels spin with the road, a bit slower in the air
-    G.wheelA += (v / Math.max(1, WHEELS[0].r)) * (f.active ? CFG.WHEEL_AIR_SPIN : 1) * dt;
+    G.wheelA += Math.min(v / Math.max(1, WHEELS[0].r), CFG.WHEEL_MAX_RAD_S) * (f.active ? CFG.WHEEL_AIR_SPIN : 1) * dt;
     if (G.wheelA > TAU) G.wheelA -= TAU;
   }
 

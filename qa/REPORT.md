@@ -257,3 +257,46 @@ Flight at 1.6×: single 0.70 s, double 0.95 s (`dur / speedMul^0.75`).
 - **Housekeeping:** `qa/screenshots/*.png` are git-ignored, so none of the three rounds' evidence is in the repo; keep the local copies or un-ignore a curated subset.
 
 **Final verdict: SHIP v0.3.**
+---
+
+# Round 4 (v0.4, commit e6ad0e1) — owner-driven flip/rider rework
+
+Scope: the owner's four complaints (2D-picture flip, floating static rider, non-spinning wheels, black line under cars) plus regression. Same harness, sequential runs. Evidence: `qa/screenshots/qa4_*.png` (bursts, zoom strips `qa4_zoom_*.png`). Pages serves v0.4 byte-for-byte (`game.js` md5 match). `.env` untracked.
+
+## Score table
+
+| # | Area | R3 | R4 | Verdict |
+|---|------|----|----|---------|
+| 1 | Visual / art direction | 8 | **9** | The flip is finally a drawn object: eight 3/4 keyframes, every frame of the 1.0×, 1.6× and double bursts reads as one car rolling toward the camera; cross-fade frames show no ghosting; new crouched skate stance and tuck; feet on the roof at rest and ≤ 3.3 px above it in flight; no line under any car. Only unverifiable-here risk: wheel-spin strobing (R4-1). |
+| 2 | Gameplay / feel | 7 | **7** | Unchanged by design — the timing table is identical to v0.3 to the millisecond (physics untouched, confirmed). Pickup 175 ms at 1.28× still open (R3-1). |
+| 3 | Mobile engineering | 8 | **8** | 0 console messages on five viewports; FPS avg 100 / min 97 / 0 frames > 25 ms; heap 1.8–2.5 MB flat over 60 s (nodes 74, listeners 54 constant). First load grew to 1.97 MB / 29 requests (img 989 KB) — inside the 3 MB budget, but note it. |
+| 4 | Audio | 8 | **8** | Untouched. |
+| 5 | Code quality | 8 | **8** | Keyframe pick + squash + cross-fade is 12 lines of `updateCarPose()`; `CAR`/`RIDER` module state, no per-frame allocation; wheel canvases built once in `buildWheels()`. |
+| 6 | Repo / deploy | 9 | **9** | Pages = local; `docs/screenshots/*.png` (1.6 MB) now committed — fine for a README, just know it's there. |
+
+**Ship / don't ship: SHIP v0.4.**
+
+## Owner's points, measured
+
+| Complaint | v0.4 answer | Measured | Status |
+|---|---|---|---|
+| "Two 2D pictures rotating" | 8 roll keyframes at 45°, nearest-θ pick, ≤ 8 % squash, 15 % cross-fade | Fine trace at 60 fps: keyframe index advances 0→7→0 monotonically (single), twice for the double; squash `sy` stays 0.921–1.0 and is symmetric at each boundary; cross-fade alpha ≤ 0.22 for 2–3 frames per boundary. Burst strips `qa4_zoom_burst_{1.0x,1.6x,double}_strip.png`: 33 frames, each one car; boundary frames `qa4_boundary_{0,1,2}.png`, `qa4_zoom_boundary_2x.png`: no double image, no pop. | **fixed** |
+| Static floating rider | feet track the car's drawn top edge; lift ≤ 0.12 carH·sin(πu); knee bob 1.6 Hz at rest | `topY − feetY` over every airborne frame: −0.7 px (the 6/900 sole sink) at takeoff/landing → +3.3 px at the apex, in all three bursts; limit 0.12 × 33 = 4.0 px. At rest: feet 0.7 px below the roof edge (`qa4_zoom_rest_2x.png`). New `musk_ride.png` (430×900) is a real crouch, `musk_air.png` (519×817) a tuck. | **fixed** |
+| Wheels don't spin | tyre cut-outs rotated by `G.wheelA` | Δangle over 0.5 s: 4.31 rad at 1.0×, 1.87 rad (mod 2π; = 27.0 rad) at 1.6× — proportional to road speed; mirrored sign on the 180° frame in code; Δ = 0.000 during crash/over. | **fixed**, see R4-1 |
+| Black line under parked cars / above the Tesla | ground rows stripped from `tesla_side` (282 px), `obst_muscle` (310), `obst_pickup` (464) | Bottom four rows of every sprite hold only 100–150 opaque px of 900–1000 (the tyre contact patches), no full-width row. 2× zooms `qa4_zoom_parked_2x.png`, `qa4_zoom_rest_2x.png`, `qa4_zoom_apex_2x.png`: no line; only the intentional soft shadow ellipse under the Tesla. | **fixed** |
+
+## Regression
+
+- Timing sweep v0.4 = v0.3 (1.0×: 300/225/325 ms singles, pairs never single; 1.28×: 275/175/325; 1.6×: 225/200/275; pair-doubles 150–250 ms). Natural 240 s autopilot: 189 spawns, 42 pairs, 0 before score 4, 0 overlaps, 0 crashes, first obstacle 1.62 s after retry.
+- Console: 0 messages, 0 non-200 requests on 390×844 / 360×780 / 430×932 / 844×390 / 1280×800.
+- FPS 15 s isolated: avg 100, min 97.1, p1 98, max frame 10.3 ms. Heap: 1799 → 2090 → 2480 → 2274 → 2090 → 1989 → 1981 KB over 60 s.
+- First load: 1 971 201 B / 29 requests (v0.3: 1.74 MB / 25). `assets/img` 989 519 B (four roll frames 56 KB each, `tesla_top` 41 KB).
+
+## Open items
+
+- **R4-1 · should-fix (verify on a phone, 10 min):** wheel-spin strobing. Tyre radius is 9.4 CSS px at 390 wide; at 316 px/s the wheels turn 33.7 rad/s = **32° per frame at 60 fps** (51° at 1.6×). A 5- or 6-spoke rim has 72°/60° symmetry, so at these rates the spokes will alias — likely reading as slow backward rotation or a flicker, the wagon-wheel effect. I cannot see motion in a headless harness; this is arithmetic, not an observation. Fix: cap the *visual* rate (`G.wheelA += min(ω, ~12 rad/s)·dt`, i.e. ≤ 12°/frame) or blur the cut-out into a 2-frame spoke smear above ~8 rad/s.
+- **R3-1 · should-fix (5 min):** pickup single window 175 ms at 1.28×.
+- **R4-2 · nice:** `tesla_roll_045/225` are vertical mirrors of the 135/315 renders, so their perspective is not strictly the car at those angles; invisible at 105 px, worth regenerating only if the sprites are ever shown larger.
+- **R4-3 · nice:** first load 1.97 MB; the four roll frames could drop to ~35 KB each with a 64-colour palette.
+
+**Final verdict: SHIP v0.4.** The owner's four points are resolved as specified; nothing regressed.
