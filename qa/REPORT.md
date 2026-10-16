@@ -300,3 +300,40 @@ Scope: the owner's four complaints (2D-picture flip, floating static rider, non-
 - **R4-3 · nice:** first load 1.97 MB; the four roll frames could drop to ~35 KB each with a 64-colour palette.
 
 **Final verdict: SHIP v0.4.** The owner's four points are resolved as specified; nothing regressed.
+---
+
+# Round 5 (v0.5, commit f426f9b) — short regression: raised portrait layout, first-run tutorial, soft tap sfx
+
+Same harness, sequential runs. Evidence: `qa/screenshots/qa5_*.png`. Pages serves v0.5 byte-for-byte (`game.js` md5 match). `.env` untracked.
+
+## Score table
+
+| # | Area | R4 | R5 | Verdict |
+|---|------|----|----|---------|
+| 1 | Visual / art direction | 9 | **9** | Portrait rider now sits at 0.70 H (groundY 591 of 844): the action is near the vertical centre, the double apex clears the HUD by 250+ px, the FLIP button has 150 px of clear asphalt below the car. Trade-off: asphalt is now 30 % of the portrait screen (was 20 %). "DOUBLE TAP!" hint is legible over the buildings (white, ink outline, 39 px). Landscape/desktop unchanged (groundY 320 / 656). |
+| 2 | Gameplay / feel | 7 | **8** | The tutorial fixes the biggest onboarding hole: three singles (muscle, sedan, pickup) then a pair at exactly 0.38 carW, hint up 0.49 s before the pair enters, world at 0.6×. In real time the double window on the tutorial pair is **475 ms** vs 200 ms for the same pair at normal speed — wider, never narrower. Flag set only on clearing; crash repeats it; no hint and normal random spawns after reload. |
+| 3 | Mobile engineering | 8 | **8** | 0 console messages / 0 non-200 on all five viewports; FPS avg 100 / min 97.1 / 0 frames > 25 ms; heap 1.8–2.6 MB flat over 60 s (nodes 74, listeners 54 constant). First load 1.97 MB / 29 requests (unchanged). |
+| 4 | Audio | 8 | **8** | 8/8 buffers decode. `pop` 0.277 s peak −6.1 dBFS / mean −20.7; `land` 0.347 s peak −6.0 / mean −19.3 — both softened as described. Not audible here. |
+| 5 | Code quality | 8 | **8** | Tutorial is ~40 lines on the existing spawn/score paths; time-scale eased in real time in `frame()` and applied as `update(FIXED_DT * timeScale)`, so physics stays deterministic; QA hooks `setTutorial`/`G.tut`/`G.timeScale` work. |
+| 6 | Repo / deploy | 9 | **9** | Pages = local. |
+
+**Ship / don't ship: SHIP v0.5.**
+
+## Measurements
+
+**Tutorial, fresh storage (390×844, autopilot):** flag `null` at start → spawns `muscle` 2.24 s, `sedan` 5.39 s, `pickup` 7.19 s, pair `muscle`+`sedan` at 9.99 s at x 543/693 (gap 40 px = 0.38 carW, 1.5 carW beyond the right edge) → hint on, `timeScale` eases to 0.60 (min observed 0.600) → pair enters the screen 0.49 s later → first tap at 11.09 s ends the hint and the slow-mo → pair cleared at 12.24 s, score 5, `teslaflip.tutorialDone` = "1", `tut.active` false → 10 s later normal random spawns at timeScale 1. Reload: title shows "DON'T HIT THE V8s", `spawns` 0, no hint, random spawns from the first obstacle. `qa5_tutorial_hint.png`, `qa5_p390_01_title_firstrun.png`, `qa5_p390_01_title_done.png`.
+
+**Crash into the tutorial pair:** single tap → crash, flag stays `null`, next `resetRun()` has `tut.active` true, `spawns` 0 → tutorial repeats.
+
+**Slow-mo sweep (real-time lead before the pair's hitbox, 25 ms steps, second tap +5 frames):** tutorial pair at 0.6× → clears for leads 0.125–0.600 s (475 ms, 20 slots); the same 0.38-gap pair with the tutorial off → 0.075–0.275 s (200 ms). Slow-mo widens the window 2.4×; the tap itself restores timeScale 1 over 0.4 s and the clear still holds.
+
+**Layout (double apex, tutorial off):** p390 head y 337 vs HUD bottom 85, button top 743 vs car bottom 591; p360 head 312 vs HUD 79, button top 686 vs ground 546; p430 head 372 vs HUD 93, ground 652; l844 ground 320 / head 78 (unchanged); d1280 ground 656 / head 161 (unchanged). Nothing clipped: `qa5_p390_03_double_apex.png`, `qa5_p360_03_double_apex.png`, `qa5_p430_03_double_apex.png`, `qa5_l844_03_double_apex.png`.
+
+## Open items (none blocking)
+
+- **R5-1 · nice:** any tap while the hint is up ends the hint and the slow-mo, even a nervous tap 0.4 s before the pair arrives — the player then meets the pair at full speed with no hint. Consider ending the hint only on a tap made while `pair1.x < L.W` (pair on screen) or on the double itself.
+- **R5-2 · nice:** first-run title shows two consecutive double-tap lines ("…DOUBLE TAP = DOUBLE FLIP" / "DOUBLE TAP = 2 CARS"). One line would do: "DOUBLE TAP FOR 2 CARS".
+- **R5-3 · nice (composition):** portrait asphalt now 30 % of the screen. If it bothers the owner, move the dash row (`LAYOUT.dash`) lower and add a second, fainter kerb line or oil stains to break it up; do not move the ground back.
+- Carried: R4-1 wheel strobing (phone check), R3-1 pickup 175 ms at 1.28×, D9 none.
+
+**Final verdict: SHIP v0.5.**

@@ -74,7 +74,7 @@ const CFG = {
   KEY_BEST: 'teslaflip.best', KEY_TUTORIAL: 'teslaflip.tutorialDone',
   // First-run tutorial: fixed spawns (three singles, then a close pair) with a "DOUBLE TAP!" hint and slow motion
   // until the player clears a pair once. Slow motion is a true world time-scale so jump geometry is unchanged.
-  TUTORIAL: { kinds: ['obst_muscle', 'obst_sedan', 'obst_pickup'], pairGap: 0.38, pairLead: 1.5, slow: 0.6, easeS: 0.4, pulseHz: 2.5 },
+  TUTORIAL: { kinds: ['obst_muscle', 'obst_sedan', 'obst_pickup'], pairGap: 0.38, pairLead: 3.5, slow: 0.6, easeS: 0.4, pulseHz: 2.5 },
 };
 
 const IMG_FILES = {
@@ -883,8 +883,9 @@ function drawTitle() {
     const pw = hint * 24, ph = hint * 3.6;
     ctx.fillStyle = 'rgba(27,20,48,0.6)'; roundRect(tx - pw / 2, hy - hint * 0.6, pw, ph, 12); ctx.fill();
   }
-  drawText('TAP = KICKFLIP · DOUBLE TAP = DOUBLE FLIP', tx, hy, 'hint', COLORS.lilac);
-  drawText(G.tut.done ? "DON'T HIT THE V8s" : 'DOUBLE TAP = 2 CARS', tx, hy + hint * 1.5, 'hint', COLORS.lilac);
+  const done = G.tut.done;
+  drawText(done ? 'TAP = KICKFLIP · DOUBLE TAP = DOUBLE FLIP' : 'TAP = KICKFLIP', tx, hy, 'hint', COLORS.lilac);
+  drawText(done ? "DON'T HIT THE V8s" : 'DOUBLE TAP = JUMP 2 CARS', tx, hy + hint * 1.5, 'hint', COLORS.lilac);
   if (G.best > 0) drawText(G.bestStr, W / 2, L.safe.t + 12, 'best', COLORS.gold);
 }
 
@@ -935,7 +936,11 @@ function onTap(x, y) {
   if (x >= 0 && x >= L.mute.x && x <= L.mute.x + L.mute.s && y >= L.mute.y && y <= L.mute.y + L.mute.s) { Snd.toggleMute(); return; }
   G.btnT = 120;
   if (G.state === 'title') { resetRun(); tryFlip(); return; }
-  if (G.state === 'play') { if (G.tut.hint) endTutorialHint(); tryFlip(); return; }
+  if (G.state === 'play') {
+    // a nervous early tap (pair not on screen yet) flips but keeps the hint + slow-mo
+    if (G.tut.hint && G.tut.pair1 && G.tut.pair1.x < L.W) endTutorialHint();
+    tryFlip(); return;
+  }
   if (G.state === 'over') resetRun();           // 'crash' ignores taps so the panel can't be skipped by accident
 }
 
