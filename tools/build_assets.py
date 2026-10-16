@@ -58,6 +58,12 @@ side = side.resize((900, round(side.height * 900 / side.width)), L)
 bot = Image.open(RAW / "roadster_bottom_cut.png").convert("RGBA")
 bot = bot.resize((900, round(bot.height * 900 / bot.width)), L)
 save(side, "tesla_side.png", quant=True); save(bot, "tesla_bottom.png", quant=True)
+# top view: 900 wide, padded (transparent, centred) to the bottom view's height so dev can swap top/bottom 1:1
+top = Image.open(RAW / "roadster_top_cut.png").convert("RGBA")
+top = top.resize((900, round(top.height * 900 / top.width)), L)
+canvas = Image.new("RGBA", (900, bot.height), (0, 0, 0, 0)); canvas.alpha_composite(top, (0, (bot.height - top.height) // 2))
+save(canvas, "tesla_top.png", quant=True)
+print(f"tesla_top: car body rows {(bot.height - top.height) // 2}..{(bot.height - top.height) // 2 + top.height - 1} inside {bot.height} tall canvas")
 # roof row: first row with alpha>128 at the horizontal centre, and the flattest roof span
 a = np.asarray(side)[:, :, 3] > 128
 cx = side.width // 2

@@ -31,11 +31,18 @@ const CFG = {
   MUSK_FOOT_X: 430 / 900,       // feet centre along the car (artist pivot)
   MUSK_SINK: 6 / 900,           // soles sink into the roof, in carW
   // Flips. peak = rider apex, carPeak = Roadster apex (in carW). The car lags takeoff by carDelay.
+  // Durations are at 1.0× road speed. Flight time scales with speed^-SPEED_TIME_EXP: at 1.0 the jump LENGTH
+  // would be constant and tap windows shrink 1:1 with speed; 0.75 lets the jump grow ~12 % at the 1.6× cap so
+  // the tightest windows (pickup, pair doubles) stay playable while pairs remain double-only.
   FLIP:   { dur: 1.0, turns: 1, peak: 0.98, carPeak: 0.90, carDelay: 0.03 },
   DOUBLE: { dur: 1.35, turns: 2, peak: 1.13, carPeak: 1.05 },  // shorter hang than before: the double is a commitment
   DOUBLE_TAP_MS: 200,
   QUEUE_WINDOW_S: 0.15,         // a mid-air tap only queues a flip this close to landing
   SPIN_FRAC: 0.94,              // rotation completes at this fraction of the flight
+  SPEED_TIME_EXP: 0.75,
+  FLIP_SFX_RATE_MAX: 1.3,       // flip whoosh speeds up with the shorter flight, capped
+  BOX_DEPTH: 0.7,               // car box depth for the solid-body flip, × carH (belly/roof read as the thin faces of a deck)
+  FACE_MIN_PX: 3,               // skip box faces thinner than this (half-height)
   TILT_Z: 12 * Math.PI / 180,
   LEAN: 9 * Math.PI / 180,
   SQUASH: { ms: 80, x: 1.12, y: 0.9 },
@@ -51,9 +58,9 @@ const CFG = {
     obst_sedan:  [{ x1: 0.06, x2: 0.30, top: 0.60 }, { x1: 0.30, x2: 0.75, top: 0.94 }, { x1: 0.75, x2: 0.90, top: 0.64 }],
   },
   PLAYER_SHRINK: 0.15, PLAYER_LENIENCY: 0.08,  // AABB inset; leniency lifts the player's bottom (in carW)
-  GAP_SLACK: 0.35,              // s added to the flip duration for the minimum gap
+  GAP_SLACK: 1.05,              // carW added to the single-flip length for the minimum gap (distance, not time)
   GAP_RAND: [1.3, 0.4], GAP_RAND_SCORE: 40,   // max extra gap (× min gap) shrinks from [0] to [1] by this score
-  PAIR_CHANCE: [0.2, 0.4], PAIR_CHANCE_SCORE: 60, PAIR_MIN_SCORE: 4, PAIR_GAP: [0.3, 0.45],  // pairs (gap in carW) need the double; chance ramps with score
+  PAIR_CHANCE: [0.2, 0.4], PAIR_CHANCE_SCORE: 60, PAIR_MIN_SCORE: 4, PAIR_GAP: [0.33, 0.45],  // pairs (gap in carW) need the double; chance ramps with score
   FIRST_SPAWN_S: 1.6,
   PUFF_EVERY: [0.7, 1.8], PUFF_AT: { x: 0.93, y: 0.12 },
   CRASH_S: 0.8,
@@ -63,18 +70,18 @@ const CFG = {
 
 const IMG_FILES = {
   musk_ride: 'assets/img/musk_ride.png', musk_air: 'assets/img/musk_air.png',
-  tesla_side: 'assets/img/tesla_side.png', tesla_bottom: 'assets/img/tesla_bottom.png',
+  tesla_side: 'assets/img/tesla_side.png', tesla_bottom: 'assets/img/tesla_bottom.png', tesla_top: 'assets/img/tesla_top.png',
   bg_far: 'assets/img/bg_far.png', bg_mid: 'assets/img/bg_mid.png', bg_near: 'assets/img/bg_near.png',
   obst_muscle: 'assets/img/obst_muscle.png', obst_pickup: 'assets/img/obst_pickup.png', obst_sedan: 'assets/img/obst_sedan.png',
 };
 // Natural sizes used for placeholders when a file is missing (from the art contract).
 const IMG_FALLBACK = {
-  musk_ride: [426, 900], musk_air: [708, 787], tesla_side: [900, 287], tesla_bottom: [900, 434],
+  musk_ride: [426, 900], musk_air: [708, 787], tesla_side: [900, 287], tesla_bottom: [900, 434], tesla_top: [900, 434],
   bg_far: [2048, 379], bg_mid: [2048, 417], bg_near: [2048, 211],
   obst_muscle: [940, 316], obst_pickup: [1000, 470], obst_sedan: [900, 327],
 };
 const PLACEHOLDER_COLOR = {
-  musk_ride: '#5aa0e6', musk_air: '#7cc1ff', tesla_side: '#e9e9e4', tesla_bottom: '#3a3a48',
+  musk_ride: '#5aa0e6', musk_air: '#7cc1ff', tesla_side: '#e9e9e4', tesla_bottom: '#3a3a48', tesla_top: '#d9d9d4',
   bg_far: '#6b5fa8', bg_mid: '#4e4178', bg_near: '#7a7490',
   obst_muscle: '#f08a2a', obst_pickup: '#6e7d55', obst_sedan: '#b0966e',
 };
@@ -188,6 +195,9 @@ function buildSprites() {
   const s = L.px;
   for (const n of ['musk_ride', 'musk_air']) { const [w, h] = natSize(n); sprite(n, w * L.muskS, h * L.muskS); }
   for (const n of ['tesla_side', 'tesla_bottom', ...CFG.OBST_KINDS]) { const [w, h] = natSize(n); sprite(n, w * s, h * s); }
+  tintCopy('tesla_side_dark', SPR.tesla_side, 'rgba(0,0,0,0.35)');          // far side of the flipping car
+  if (images.tesla_top) { const [w, h] = natSize('tesla_top'); sprite('tesla_top', w * s, h * s); }
+  else tintCopy('tesla_top', SPR.tesla_bottom, 'rgba(255,255,255,0.45)');   // roof stand-in until tesla_top.png lands
   for (const n of ['bg_far', 'bg_mid']) { const [w, h] = natSize(n); sprite(n, w * L.layerS, h * L.layerS); }
   // bg_near is the kerb: stretch it (within limits) so it exactly fills horizon → kerb and no flat band shows.
   const [nw, nh] = natSize('bg_near');
@@ -219,6 +229,18 @@ function sprite(name, w, h) {
     c.font = 'bold ' + Math.max(10, Math.min(ph * 0.3, pw * 0.09)) + 'px ' + FONT_FAMILY;
     c.fillText(name, pw / 2, ph / 2);
   }
+  return sp;
+}
+
+/** Tinted copy of a sprite (overlay on the opaque pixels), built once so the renderer never composites per frame. */
+function tintCopy(name, src, overlay) {
+  let sp = SPR[name];
+  if (!sp) sp = SPR[name] = { cv: document.createElement('canvas'), w: 0, h: 0 };
+  sp.cv.width = src.cv.width; sp.cv.height = src.cv.height; sp.w = src.w; sp.h = src.h;
+  const c = sp.cv.getContext('2d');
+  c.drawImage(src.cv, 0, 0);
+  c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = overlay; c.fillRect(0, 0, sp.cv.width, sp.cv.height);
   return sp;
 }
 
@@ -254,28 +276,29 @@ function muskH() { return SPR.musk_ride.h; }
 
 /* ───────────────────────────── 5. Gameplay ───────────────────────────── */
 function startFlip(kind) {
-  const f = G.flip, cw = L.carW;
-  const h = kind.peak * cw, hc = kind.carPeak * cw, cd = CFG.FLIP.carDelay, cdur = kind.dur - cd;
-  f.active = true; f.t = 0; f.dur = kind.dur; f.turns = kind.turns;
+  const f = G.flip, cw = L.carW, sm = Math.pow(G.speedMul, CFG.SPEED_TIME_EXP);
+  const dur = kind.dur / sm, cd = CFG.FLIP.carDelay / sm, cdur = dur - cd;   // ~same length over the road at any speed
+  const h = kind.peak * cw, hc = kind.carPeak * cw;
+  f.active = true; f.t = 0; f.dur = dur; f.turns = kind.turns;
   // Parabola with explicit velocity/gravity so a mid-air upgrade to a double stays continuous.
-  f.y = 0; f.vy = 4 * h / kind.dur; f.g = 8 * h / (kind.dur * kind.dur);
+  f.y = 0; f.vy = 4 * h / dur; f.g = 8 * h / (dur * dur);
   f.cy = 0; f.cvy = 4 * hc / cdur; f.cg = 8 * hc / (cdur * cdur); f.carDelay = cd;
-  f.theta = 0; f.thetaMax = TAU * kind.turns; f.omega = f.thetaMax / (kind.dur * CFG.SPIN_FRAC);
+  f.theta = 0; f.thetaMax = TAU * kind.turns; f.omega = f.thetaMax / (dur * CFG.SPIN_FRAC);
   G.squashT = 0;
   spawnDust(L.playerX - cw * 0.3, L.groundY, 6, 1);
-  Snd.play('pop'); Snd.play('flip', 1, 0.05);
+  Snd.play('pop'); Snd.play('flip', Math.min(CFG.FLIP_SFX_RATE_MAX, sm), 0.05);   // whoosh keeps pace with the flight
 }
 
 /** Second tap within DOUBLE_TAP_MS of takeoff: re-solve gravity so the current height/velocity
  *  flow into a longer, higher flight that touches down exactly at DOUBLE.dur. */
 function upgradeToDouble() {
-  const f = G.flip, K = CFG.DOUBLE, tau = K.dur - f.t;
-  f.turns = 2; f.dur = K.dur;
+  const f = G.flip, K = CFG.DOUBLE, dur = K.dur / Math.pow(G.speedMul, CFG.SPEED_TIME_EXP), tau = dur - f.t;
+  f.turns = 2; f.dur = dur;
   f.g = 2 * (f.y + f.vy * tau) / (tau * tau);
   if (f.t >= f.carDelay) f.cg = 2 * (f.cy + f.cvy * tau) / (tau * tau);
-  else { const hc = K.carPeak * L.carW, cdur = K.dur - f.carDelay; f.cvy = 4 * hc / cdur; f.cg = 8 * hc / (cdur * cdur); }
+  else { const hc = K.carPeak * L.carW, cdur = dur - f.carDelay; f.cvy = 4 * hc / cdur; f.cg = 8 * hc / (cdur * cdur); }
   f.thetaMax = TAU * 2; f.omega = (f.thetaMax - f.theta) / (tau * CFG.SPIN_FRAC);
-  Snd.play('flip', 1.2);
+  Snd.play('flip', Math.min(CFG.FLIP_SFX_RATE_MAX, 1.2 * G.speedMul));
 }
 
 function land() {
@@ -319,9 +342,9 @@ function spawnNext() {
     const partner = spawnObstacle(lowKind(), first.x + first.w + rand(CFG.PAIR_GAP[0], CFG.PAIR_GAP[1]) * L.carW);
     if (partner) { span = partner.x + partner.w - first.x; wasPair = true; }
   }
-  const v = CFG.SCROLL_SPEED * L.carW * G.speedMul;
+  // Minimum gap is a distance (flip length at 1.0× + slack), so it stays fair at any speed.
   const flipDur = wasPair ? CFG.DOUBLE.dur : CFG.FLIP.dur;     // recovering from a double takes longer
-  const minGap = v * (flipDur + CFG.GAP_SLACK);
+  const minGap = (CFG.SCROLL_SPEED * flipDur + CFG.GAP_SLACK) * L.carW;
   const k = Math.min(1, G.score / CFG.GAP_RAND_SCORE);          // gaps tighten as the score climbs
   const gapRand = CFG.GAP_RAND[0] + (CFG.GAP_RAND[1] - CFG.GAP_RAND[0]) * k;
   G.spawnDist = span + minGap * (1 + Math.random() * gapRand);
@@ -592,32 +615,40 @@ function drawShadow() {
 
 function idleBob() { return Math.sin(G.time * TAU * CFG.BOB.hz) * CFG.BOB.px * 0.5; }
 
-/** Solid-body kickflip: the car is a box (height carH, depth = belly sprite height) rotating about
- *  its long axis, seen from the side. Each visible face is drawn with its projected height and
- *  offset, back to front: near side → belly → far side (upside-down) → roof → near side. */
+/** Solid-body kickflip: the car is a box (height carH, depth BOX_DEPTH × carH) rotating about its
+ *  long axis, seen from the side. Each visible face is drawn with its projected height and offset,
+ *  back to front, always from a real sprite: near side → belly (tesla_bottom) → far side (darkened
+ *  side view, upside-down) → roof (tesla_top). FACES is filled in place every frame:
+ *  [depth toward viewer, screen-y of centre, projected half-height, kind]. */
+const FACE_NEAR = 0, FACE_BELLY = 1, FACE_FAR = 2, FACE_ROOF = 3;
+const FACES = [[0, 0, 0, FACE_NEAR], [0, 0, 0, FACE_BELLY], [0, 0, 0, FACE_FAR], [0, 0, 0, FACE_ROOF]];
+function setFace(f, depth, y, half) { f[0] = depth; f[1] = y; f[2] = half; }
+
 function drawCarFaces(theta) {
-  const side = SPR.tesla_side, belly = SPR.tesla_bottom, cw = L.carW;
-  const Hh = L.carH * 0.5, Dh = belly.h * 0.5;
+  const Hh = L.carH * 0.5, Dh = L.carH * CFG.BOX_DEPTH * 0.5;
   const s = Math.sin(theta), c = Math.cos(theta);
-  // face: [depth toward the viewer, screen-y of centre, projected half-height, sprite, flipY, crop]
-  // The roof has no sprite of its own: use the body/canopy band of the side view (top 45 %, no wheels).
-  const near = [Dh * c, -Dh * s, Hh * c, side, 1, 1];
-  const bottom = [Hh * s, Hh * c, Dh * s, belly, -1, 1];
-  const far = [-Dh * c, Dh * s, -Hh * c, side, -1, 1];
-  const top = [-Hh * s, -Hh * c, -Dh * s, side, -1, 0.45];
-  const faces = [near, bottom, far, top];
+  setFace(FACES[FACE_NEAR], Dh * c, -Dh * s, Hh * c);
+  setFace(FACES[FACE_BELLY], Hh * s, Hh * c, Dh * s);
+  setFace(FACES[FACE_FAR], -Dh * c, Dh * s, -Hh * c);
+  setFace(FACES[FACE_ROOF], -Hh * s, -Hh * c, -Dh * s);
   for (let pass = 0; pass < 2; pass++) {              // two visible faces at most; draw the deeper one first
     let best = null;
-    for (const fc of faces) if (fc[0] > 0 && fc[2] > 0.5 && (!best || fc[0] < best[0])) best = fc;
+    for (const f of FACES) if (f[0] > 0 && f[2] >= CFG.FACE_MIN_PX && (!best || f[0] < best[0])) best = f;
     if (!best) break;
+    drawFace(best);
     best[0] = -1;                                       // consumed
-    const sp = best[3], crop = best[5];
-    ctx.save();
-    ctx.translate(0, best[1]);
-    ctx.scale(1, best[4] * best[2] / (sp.h * 0.5));
-    ctx.drawImage(sp.cv, 0, 0, sp.cv.width, sp.cv.height * crop, -cw / 2, -sp.h / 2, sp.w, sp.h);
-    ctx.restore();
   }
+}
+
+function drawFace(f) {
+  const cw = L.carW, half = f[2], kind = f[3];
+  const sp = kind === FACE_NEAR ? SPR.tesla_side : kind === FACE_BELLY ? SPR.tesla_bottom
+    : kind === FACE_FAR ? SPR.tesla_side_dark : SPR.tesla_top;
+  ctx.save();
+  ctx.translate(0, f[1]);
+  ctx.scale(1, (kind === FACE_BELLY || kind === FACE_FAR ? -1 : 1) * half / (sp.h * 0.5));   // belly and far side are mirrored
+  ctx.drawImage(sp.cv, -cw / 2, -sp.h / 2, sp.w, sp.h);
+  ctx.restore();
 }
 
 function drawCar() {

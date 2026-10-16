@@ -49,10 +49,10 @@ for n in ("obst_muscle.png", "obst_pickup.png", "obst_sedan.png"):
     scene.alpha_composite(o, (ox - o.width // 2, ground - o.height)); ox += int(o.width * 0.55)
 d = ImageDraw.Draw(scene); d.text((20, 20), "Tesla Flip - art contact sheet (scene mock 1080x1920)", fill=(255, 255, 255, 255))
 # sprite strip on dusk colour
-items = ["musk_ride.png", "musk_air.png", "tesla_side.png", "tesla_bottom.png", "obst_muscle.png", "obst_pickup.png", "obst_sedan.png", "icon.png"]
-sh = 300; ims = []
+items = ["musk_ride.png", "musk_air.png", "tesla_side.png", "tesla_top.png", "tesla_bottom.png", "obst_muscle.png", "obst_pickup.png", "obst_sedan.png", "icon.png"]
+sh = 260; ims = []
 for n in items:
-    im = load(n); s = min(sh / im.height, 520 / im.width); ims.append(im.resize((round(im.width * s), round(im.height * s)), L))
+    im = load(n); s = min(sh / im.height, 470 / im.width); ims.append(im.resize((round(im.width * s), round(im.height * s)), L))
 strip = Image.new("RGBA", (sum(i.width for i in ims) + 30 * (len(ims) + 1), sh + 60), (0x20, 0x20, 0x40, 255))
 x = 30
 for im in ims: strip.alpha_composite(im, (x, sh - im.height + 30)); x += im.width + 30

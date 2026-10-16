@@ -3,7 +3,7 @@
 
 Pure numpy/scipy synthesis. Renders a sample-exact seamless loop:
   tools/_raw/music/theme.wav   44.1 kHz 16-bit stereo master
-  assets/music/theme.ogg       libvorbis -q:a 4
+  assets/music/theme.ogg       libvorbis -q:a 3
   assets/music/theme.mp3       libmp3lame (128k, falls back to 112k/96k to stay <= 900 KB)
 and (unless --no-check) runs the self-check and writes
   qa/screenshots/music_loop_join.png, qa/screenshots/music_overview.png
@@ -727,7 +727,7 @@ def write_and_encode(out):
     ogg = os.path.join(OUT_DIR, "theme.ogg")
     mp3 = os.path.join(OUT_DIR, "theme.mp3")
     subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", wav,
-                    "-c:a", "libvorbis", "-q:a", "4", ogg], check=True)
+                    "-c:a", "libvorbis", "-q:a", "3", ogg], check=True)
     for br in ("128k", "112k", "96k"):
         subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", wav,
                         "-c:a", "libmp3lame", "-b:a", br, mp3], check=True)

@@ -138,3 +138,74 @@ Images 721 KB (11 PNGs, all 8-bit palette; no visible banding), SFX 66 KB ogg / 
 5. **D5 + D6** Move the FLIP button out of the lane in landscape/desktop, scale the sidewalk strip to 1.0 and tighten the portrait vertical layout (dev, 1 h).
 
 After those, re-run the timing sweeps (per car at 1.0× and at the speed cap) and re-shoot the five viewports before publishing.
+---
+
+# Round 2 (v0.2, commit ae07258) — re-verification
+
+Same harness and viewports as round 1 (playwright-core + Edge headless, deterministic rAF stepping, 390×844@2 / 360×780 / 430×932 / 844×390 / 1280×800). Evidence: `qa/screenshots/qa2_*.png` (60 shots + `qa2_zoom_*.png`). Pages (`https://klaymendel-art.github.io/tesla-flip/`) serves the v0.2 `game.js` byte-for-byte (md5 match), title in 0.85 s, 24 requests / 1.79 MB, 0 console messages. `.env` still untracked. Every dev/art claim below was re-measured, not taken from the report.
+
+## Round-2 score table
+
+| # | Area | R1 | R2 | Verdict |
+|---|------|----|----|---------|
+| 1 | Visual / art direction | 6 | **7** | Far skyline + sun now visible (diff test: 16.6k device px of `bg_far` show above `bg_mid`), stars/clouds fill the sky, kerb strip at full scale (lamps taller than the rider), white patches gone. Held back by the new solid-body flip, which draws the car as two stacked cars at takeoff/landing (N1), and an unchanged standing rider pose. |
+| 2 | Gameplay / feel | 6 | **7** | Single-flip windows now 225–325 ms for every car at 1.0×, pairs need the double at 1.0× (single: NEVER), speed ramp is felt (1.08× at 10, 1.32× at 40, cap 1.6× at 80), gaps tighten to 1.57 s, pairs spawn together and read as pairs. Held back by: the double is still strictly dominant (575–675 ms vs 225–325 ms) and difficulty *inverts* as speed rises (N2). |
+| 3 | Mobile engineering | 8 | **8** | Unchanged and still clean: 0 console errors, FPS avg 100 / min 92 / 0 frames > 25 ms (isolated 15 s run), heap 2.0–2.8 MB flat over 60 s, safe-area and orientation handling intact, mute persists. |
+| 4 | Audio | 7 | **8** | `roll` now stops on crash (`loops` = [theme] in `over`), music ducked to 0.35 on the panel, `file://` logs exactly one warning. mp3 fallback still works (8/8). |
+| 5 | Code quality | 8 | **8** | `CFG.LAYOUT`/`COLORS`, font cache, shared `playerBottom()`, 150 ms queue window, sky speed lines slowed to 0.25× — all verified in source. New: `drawCarFaces()` allocates 5 arrays per frame while airborne (N3). |
+| 6 | Repo / deploy | 8 | **9** | README now has controls, local run, `?debug=1`, parody note; Pages = local. `theme.ogg` still 930 KB (not re-encoded). |
+
+**Ship / don't ship: SHIP v0.2.** Nothing is below 7. N1 and N2 are the recommended v0.3 items; neither blocks showing it around.
+
+## Status of round-1 defects
+
+| ID | Status | Evidence |
+|----|--------|----------|
+| D1 white patches in pickup / muscle | **fixed** | 0 opaque near-white px in the lower-middle of both sprites (was 37 182 / 18 652); muscle quarter window now glass-grey. `qa2_zoom_pickup_road.png`, `qa2_debug_00_ground.png`. |
+| D2 far layer + sun hidden | **fixed** | `bg_far` top at y 331 vs `bg_mid` top 374 (390×844); TV tower, domes and the sun disc visible in every shot. Diff of `qa2_layers_normal.png` vs `qa2_layers_no_far.png`: 16 632 px differ in the y 662–908 band. |
+| D3 pickup single window 100 ms | **fixed** | 1.0×: pickup 225 ms (0.10–0.325 s), muscle 275 ms, sedan 325 ms. Dev claimed 250 ms; measured 225 — still above the 200 ms target. Three-box hitboxes (hood/cab/bed) confirmed in `qa2_debug_00_ground.png`. |
+| D4 no difficulty curve | **partially** | Ramp: 1.08× @10, 1.16× @20, 1.32× @40, 1.6× @80 (was 1.03× @10). Min non-pair gap 1.57 s (was 1.75–4.33 → now 1.57–3.65). Pair chance ramps (34 pairs in 143 spawns). But the double still wins everywhere (see N2) and `DOUBLE.dur` 1.35 did not change the dominance at 1.0×. |
+| D5 FLIP button in the lane (landscape/desktop) | **fixed (accepted)** | `L.showBtn = false` in landscape; hint panel behind the two hint lines. `qa2_l844_02_play_obstacles.png`, `qa2_d1280_03_flip_apex.png`. Hiding rather than relocating is acceptable: the whole screen is the target, desktop has Space/Enter, and the title says "TAP TO FLIP". A 36 px corner affordance would be nicer (nice-to-have). |
+| D6 portrait composition | **partially → acceptable** | Horizon 0.66 H / ground 0.80 H, kerb strip 95 px tall at full scale, flat band gone, stars + 3 clouds. Sky above the skyline is still ~55 % of the screen during play and the asphalt is 20 % — but it now reads as deliberate air for the jump rather than dead space. `qa2_p390_02_play_obstacles.png`. |
+| D7 roll loop never stops | **fixed** | After crash: `loops` = ["theme"], `musicBus` 0.35; `startLoop('roll')` + `duckMusic(false)` on `resetRun()` present in code (runtime re-check of the restart not repeated). |
+| D8 file:// console flood | **fixed** | Real file:// open (no Chromium flags): 1 warning, 0 errors, game playable silently. `qa2_eng_file_url.png`. |
+| D9 standing rider pose | **not fixed** (acknowledged) | `musk_ride.png` unchanged. Cosmetic. |
+| D10 card flip | **changed — mixed** | Mid-flight frames (200–500 ms) now show a real belly-up car with wheels up: better than v0.1. Takeoff/landing frames are worse — see N1. |
+| D11 code items | **mostly fixed** | Magic numbers → `CFG.LAYOUT`/`COLORS`; `drawText` uses pre-built font strings; `playerBottom()` shared; queue only in last 150 ms; sky lines 0.25×. Left: `G.scroll` wrap (harmless), N3. |
+| D12 README / ogg size | **fixed / partially** | README rewritten and accurate. `theme.ogg` still 930 KB (mp3 868 KB). |
+
+## Timing sweeps v0.2 (25 ms steps, "lead" = s before hitbox contact)
+
+| Speed (score) | Warning edge→contact | Single: muscle / pickup / sedan | Double over single car | Pair @0.30 / 0.375 / 0.45 carW — single | — double (+80 ms) |
+|---|---|---|---|---|---|
+| 1.0× (0) | 0.82 s | 275 / 225 / 325 ms | 575–675 ms | NEVER / NEVER / NEVER | 200–225 / 175–200 / 150–175 ms |
+| 1.28× (38) | 0.64 s | 400 / 350 / 450 ms | 900–925 ms | 75–100 / 50–75 / 25–50 ms | 425–450 / 400–450 / 375–400 ms |
+| 1.6× (75) | 0.51 s | 925 / 900 / 925 ms (any tap while visible) | 900–925 ms | 250 / 225 / 225 ms | 925 ms (any timing) |
+
+Natural spawning, 240 s autopilot: 143 spawns, 34 pairs (gap 0.31–0.44 carW, both cars in the same frame), first pair at score 5, 0 pairs before score 4, 0 overlaps, first obstacle 1.62 s after retry, 0 crashes.
+
+## Flip burst and the two deliberate non-fixes
+
+- **Solid-body flip** (`qa2_flip_single_00…10.png`, `qa2_flip_double_*.png`, `qa2_zoom_flip_frames.png`): frames 02–05 (200–500 ms) are a clear improvement — a white Roadster upside-down with four wheels up, unmistakably a car flipping. Frames 00–01 and 08–09 are a regression: the "roof" face (top 45 % of the side sprite stretched to the box depth) and the far side face render as a second full car stacked on the first, so at takeoff and touchdown the player sees a double-decker. Net: better than the card flip at the apex, worse at the ends. See N1.
+- **Rider–roof gap**: traced at 50 ms steps — the feet sit 2–8 CSS px *inside* the car silhouette while it is belly-up (they overlap the upturned wheels) and float at most 5.7 px above it at 0.45 s. At phone scale this reads as "board under the feet". **Acceptable.**
+- **FLIP button hidden in landscape/desktop** rather than relocated: **acceptable** (reasons under D5).
+
+## New defects introduced in v0.2
+
+### N1 — Solid-body flip draws two stacked cars at takeoff and landing · **should-fix (visual)**
+- Repro: tap once; look at 0–150 ms and 800–1000 ms of the flight (also 400–500 ms on the double). Evidence: `qa2_flip_single_01.png`, `qa2_flip_single_08.png`, `qa2_flip_single_09.png`, `qa2_flip_double_08.png`.
+- Cause (`drawCarFaces()`): box depth `Dh = belly.h/2` = 0.76 carH, so the box is 1.5× deeper than it is tall; the roof face is the side sprite's top 45 % *stretched* to that depth (a full-height white car silhouette), and the far side face is drawn at full brightness.
+- Fix: `Dh = L.carH * 0.55`; draw the roof as a flat light band (`#eceae6` with ink outline) or crop the side sprite to y 0.12–0.42 and never scale it beyond its own cropped height; multiply far/roof faces by a 0.65 darkening; skip any face whose projected half-height < 3 px. Keep the belly-up frames as they are.
+
+### N2 — Difficulty inverts with speed · **should-fix (gameplay)**
+- Flight time is constant (1.0 s / 1.35 s) while the horizontal distance covered scales with speed, so faster = longer jumps over cars of fixed width. Measured: single windows grow 275 → 400 → 925 ms from 1.0× to 1.6×; pairs designed for the double become single-clearable at 1.28× (25–100 ms) and comfortably so at 1.6× (225–250 ms); at 1.6× any tap while the car is on screen clears it and the double clears pairs with any timing. The only thing that gets harder is reaction time (0.82 → 0.51 s).
+- Fix (`startFlip()`/`CFG`): scale flight duration by `1 / G.speedMul` (keeps jump length constant in carW: `dur = kind.dur / G.speedMul`, gravity recomputed from the same peak), keep `GAP_SLACK` in distance units so gaps stay fair; re-run the sweep so single windows stay 225–325 ms at every speed. This also fixes the double's dominance at speed. Alternatively cap the ramp at 1.35× and widen pair spacing with score.
+
+### N3 — Per-frame allocations in `drawCarFaces()` · **nice**
+- Five arrays (`near`, `bottom`, `far`, `top`, `faces`) are created on every frame while airborne, against the "no per-frame allocations" contract. Hoist them to module scope and fill in place.
+
+### N4 — `theme.ogg` 930 KB · **nice**
+- Still the heaviest asset (52 % of first load); vorbis q3 would bring it to ≈ 700 KB.
+
+## Verdict
+**SHIP v0.2.** For v0.3: N1 (stacked-car frames), N2 (speed-scaled flight), then D9 (skate stance) and N3/N4.
