@@ -30,20 +30,25 @@ const CFG = {
   MUSK_H: 0.95,                 // rider height in carW
   MUSK_FOOT_X: 430 / 900,       // feet centre along the car (artist pivot)
   MUSK_SINK: 6 / 900,           // soles sink into the roof, in carW
-  // Flips. peak = rider apex, carPeak = Roadster apex (in carW). The car lags takeoff by carDelay.
+  // Flips. carPeak = Roadster apex (in carW); the rider is glued to the board. The car lags takeoff by carDelay.
   // Durations are at 1.0× road speed. Flight time scales with speed^-SPEED_TIME_EXP: at 1.0 the jump LENGTH
   // would be constant and tap windows shrink 1:1 with speed; 0.75 lets the jump grow ~12 % at the 1.6× cap so
   // the tightest windows (pickup, pair doubles) stay playable while pairs remain double-only.
-  FLIP:   { dur: 1.0, turns: 1, peak: 0.98, carPeak: 0.90, carDelay: 0.03 },
-  DOUBLE: { dur: 1.35, turns: 2, peak: 1.13, carPeak: 1.05 },  // shorter hang than before: the double is a commitment
+  FLIP:   { dur: 1.0, turns: 1, carPeak: 0.90, carDelay: 0.03 },
+  DOUBLE: { dur: 1.35, turns: 2, carPeak: 1.05 },             // shorter hang than before: the double is a commitment
   DOUBLE_TAP_MS: 200,
   QUEUE_WINDOW_S: 0.15,         // a mid-air tap only queues a flip this close to landing
   SPIN_FRAC: 0.94,              // rotation completes at this fraction of the flight
   SPEED_TIME_EXP: 0.75,
   FLIP_SFX_RATE_MAX: 1.3,       // flip whoosh speeds up with the shorter flight, capped
-  BOX_DEPTH: 0.7,               // car box depth for the solid-body flip, × carH (belly/roof read as the thin faces of a deck)
-  FACE_MIN_PX: 3,               // skip box faces thinner than this (half-height)
-  TILT_Z: 12 * Math.PI / 180,
+  // Kickflip rendering: 8 pre-rendered roll keyframes at 45° (000 = side, 090 = belly, 180 = side flipped,
+  // 270 = top, plus the artist's 045/135/225/315). Between keyframes a small vertical squash + cross-fade hides the steps.
+  ROLL: { squash: 0.92, blend: 0.15 },   // frames are 3/4 views: keep the smoothing squash <= 8 %
+  RIDER_GAP: 0.12,              // rider lift above the car's top edge at the apex, × carH (0 at takeoff/landing)
+  IDLE: { hz: 1.6, knees: 0.02 },   // riding idle: knee bob (rider squash) at 1.6 Hz, ~±2 px of head travel
+  WHEELS: [{ x: 142, y: 201, r: 80 }, { x: 716, y: 201, r: 80 }],  // tyre centres/radii in tesla_side px (measured; wheel bottom row 281)
+  WHEEL_AIR_SPIN: 0.6,          // wheels keep spinning a bit slower in the air
+  TILT_Z: 8 * Math.PI / 180,
   LEAN: 9 * Math.PI / 180,
   SQUASH: { ms: 80, x: 1.12, y: 0.9 },
   SHAKE: { px: 2, ms: 130 },
@@ -71,12 +76,15 @@ const CFG = {
 const IMG_FILES = {
   musk_ride: 'assets/img/musk_ride.png', musk_air: 'assets/img/musk_air.png',
   tesla_side: 'assets/img/tesla_side.png', tesla_bottom: 'assets/img/tesla_bottom.png', tesla_top: 'assets/img/tesla_top.png',
+  tesla_roll_045: 'assets/img/tesla_roll_045.png', tesla_roll_135: 'assets/img/tesla_roll_135.png',
+  tesla_roll_225: 'assets/img/tesla_roll_225.png', tesla_roll_315: 'assets/img/tesla_roll_315.png',
   bg_far: 'assets/img/bg_far.png', bg_mid: 'assets/img/bg_mid.png', bg_near: 'assets/img/bg_near.png',
   obst_muscle: 'assets/img/obst_muscle.png', obst_pickup: 'assets/img/obst_pickup.png', obst_sedan: 'assets/img/obst_sedan.png',
 };
 // Natural sizes used for placeholders when a file is missing (from the art contract).
 const IMG_FALLBACK = {
-  musk_ride: [426, 900], musk_air: [708, 787], tesla_side: [900, 287], tesla_bottom: [900, 434], tesla_top: [900, 434],
+  musk_ride: [430, 900], musk_air: [519, 817], tesla_side: [900, 282], tesla_bottom: [900, 434], tesla_top: [900, 434],
+  tesla_roll_045: [900, 421], tesla_roll_135: [900, 421], tesla_roll_225: [900, 441], tesla_roll_315: [900, 441],
   bg_far: [2048, 379], bg_mid: [2048, 417], bg_near: [2048, 211],
   obst_muscle: [940, 316], obst_pickup: [1000, 470], obst_sedan: [900, 327],
 };
@@ -105,7 +113,7 @@ function loadImages(onProgress) {
     const img = new Image();
     const finish = (ok) => { images[n] = ok ? img : null; onProgress(++done / names.length); resolve(); };
     img.onload = () => finish(true);
-    img.onerror = () => { console.warn('[TeslaFlip] image missing, using placeholder: ' + IMG_FILES[n]); finish(false); };
+    img.onerror = () => { console.warn('[TeslaFlip] image missing (fallback in use): ' + IMG_FILES[n]); finish(false); };
     img.src = IMG_FILES[n];
   })));
 }
@@ -195,9 +203,8 @@ function buildSprites() {
   const s = L.px;
   for (const n of ['musk_ride', 'musk_air']) { const [w, h] = natSize(n); sprite(n, w * L.muskS, h * L.muskS); }
   for (const n of ['tesla_side', 'tesla_bottom', ...CFG.OBST_KINDS]) { const [w, h] = natSize(n); sprite(n, w * s, h * s); }
-  tintCopy('tesla_side_dark', SPR.tesla_side, 'rgba(0,0,0,0.35)');          // far side of the flipping car
-  if (images.tesla_top) { const [w, h] = natSize('tesla_top'); sprite('tesla_top', w * s, h * s); }
-  else tintCopy('tesla_top', SPR.tesla_bottom, 'rgba(255,255,255,0.45)');   // roof stand-in until tesla_top.png lands
+  buildRollFrames();
+  buildWheels();
   for (const n of ['bg_far', 'bg_mid']) { const [w, h] = natSize(n); sprite(n, w * L.layerS, h * L.layerS); }
   // bg_near is the kerb: stretch it (within limits) so it exactly fills horizon → kerb and no flat band shows.
   const [nw, nh] = natSize('bg_near');
@@ -232,16 +239,72 @@ function sprite(name, w, h) {
   return sp;
 }
 
-/** Tinted copy of a sprite (overlay on the opaque pixels), built once so the renderer never composites per frame. */
-function tintCopy(name, src, overlay) {
+/** Vertically flipped copy of a sprite (the 180° roll keyframe). */
+function flipCopy(name, src) {
   let sp = SPR[name];
   if (!sp) sp = SPR[name] = { cv: document.createElement('canvas'), w: 0, h: 0 };
   sp.cv.width = src.cv.width; sp.cv.height = src.cv.height; sp.w = src.w; sp.h = src.h;
   const c = sp.cv.getContext('2d');
-  c.drawImage(src.cv, 0, 0);
-  c.globalCompositeOperation = 'source-atop';
-  c.fillStyle = overlay; c.fillRect(0, 0, sp.cv.width, sp.cv.height);
+  c.translate(0, sp.cv.height); c.scale(1, -1); c.drawImage(src.cv, 0, 0);
   return sp;
+}
+
+/** Opaque row range of an image as fractions of its height (alpha ≥ 128; quantised art has interior alpha 250–254).
+ *  Computed once per image on a 64 px thumbnail; falls back to the full height if pixels are unreadable (file://). */
+const alphaBoundsCache = {};
+function alphaBounds(name) {
+  if (alphaBoundsCache[name]) return alphaBoundsCache[name];
+  let top = 0, bottom = 1;
+  const img = images[name];
+  if (img) {
+    try {
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+      const c = cv.getContext('2d'); c.drawImage(img, 0, 0, 64, 64);
+      const d = c.getImageData(0, 0, 64, 64).data;
+      let first = -1, last = -1;
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) if (d[(y * 64 + x) * 4 + 3] >= 128) { if (first < 0) first = y; last = y; break; }
+      if (first >= 0) { top = first / 64; bottom = (last + 1) / 64; }
+    } catch (e) { /* tainted canvas → keep full height */ }
+  }
+  return (alphaBoundsCache[name] = { top, bottom });
+}
+
+/** The 8 roll keyframes (45° apart). Missing files fall back to the nearest existing keyframe — never a blank. */
+const ROLL_KEYS = ['tesla_side', 'tesla_roll_045', 'tesla_bottom', 'tesla_roll_135', 'tesla_side_flip', 'tesla_roll_225', 'tesla_top', 'tesla_roll_315'];
+const ROLL = ROLL_KEYS.map(() => ({ sp: null, top: 0, mid: 0, flipped: false, side: false }));
+function buildRollFrames() {
+  flipCopy('tesla_side_flip', SPR.tesla_side);
+  const have = {};
+  for (const n of ['tesla_roll_045', 'tesla_roll_135', 'tesla_roll_225', 'tesla_top']) {
+    if (images[n]) { const [w, h] = natSize(n); sprite(n, w * L.px, h * L.px); have[n] = true; }
+  }
+  have.tesla_side = have.tesla_side_flip = have.tesla_bottom = true;   // always available (bottom has its own fallback)
+  for (let k = 0; k < 8; k++) {
+    let src = k;
+    for (let d = 0; d < 8 && !have[ROLL_KEYS[src]]; d++) src = (k + [-1, 1, -2, 2, -3, 3, 4][d] + 8) % 8;   // nearest existing
+    const name = ROLL_KEYS[src], sp = SPR[name], fr = ROLL[k];
+    const base = name === 'tesla_side_flip' ? alphaBounds('tesla_side') : alphaBounds(name === 'tesla_bottom' && !images.tesla_bottom ? 'tesla_side' : name);
+    const b = name === 'tesla_side_flip' ? { top: 1 - base.bottom, bottom: 1 - base.top } : base;
+    fr.sp = sp; fr.top = b.top * sp.h; fr.mid = (b.top + b.bottom) * 0.5 * sp.h;
+    fr.side = src === 0 || src === 4; fr.flipped = src === 4;
+  }
+}
+
+/** Circular cut-outs of the two tyres from the side sprite, rotated at run time so the wheels spin. */
+const WHEELS = CFG.WHEELS.map(() => ({ cv: document.createElement('canvas'), x: 0, y: 0, r: 0 }));
+function buildWheels() {
+  const img = images.tesla_side;
+  CFG.WHEELS.forEach((w, i) => {
+    const W = WHEELS[i];
+    W.r = w.r * L.px; W.x = w.x * L.px; W.y = w.y * L.px;
+    const d = Math.max(2, Math.round(W.r * 2 * L.dpr));
+    W.cv.width = d; W.cv.height = d;
+    if (!img) return;
+    const c = W.cv.getContext('2d');
+    c.beginPath(); c.arc(d / 2, d / 2, d / 2 - 0.5, 0, TAU); c.clip();
+    const k = L.px * L.dpr;    // sprite px → device px
+    c.drawImage(img, d / 2 - w.x * k, d / 2 - w.y * k, img.naturalWidth * k, img.naturalHeight * k);
+  });
 }
 
 /* ───────────────────────────── 4. State ───────────────────────────── */
@@ -251,7 +314,8 @@ const G = {
   speedMul: 1,                   // ramps with score
   roadK: 1,                      // 0..1, road motion factor (eases to 0 during a crash)
   score: 0, best: 0, scoreStr: '0', bestStr: 'BEST 0', newBest: false,
-  flip: { active: false, t: 0, dur: 1, turns: 1, y: 0, vy: 0, g: 0, cy: 0, cvy: 0, cg: 0, carDelay: 0, theta: 0, omega: 0, thetaMax: 0 },
+  flip: { active: false, t: 0, dur: 1, turns: 1, cy: 0, cvy: 0, cg: 0, carDelay: 0, theta: 0, omega: 0, thetaMax: 0 },
+  wheelA: 0,                     // wheel spin angle
   queued: false,
   squashT: 0, shakeT: 0, btnT: 0,  // ms timers
   dustTimer: 0,
@@ -278,10 +342,9 @@ function muskH() { return SPR.musk_ride.h; }
 function startFlip(kind) {
   const f = G.flip, cw = L.carW, sm = Math.pow(G.speedMul, CFG.SPEED_TIME_EXP);
   const dur = kind.dur / sm, cd = CFG.FLIP.carDelay / sm, cdur = dur - cd;   // ~same length over the road at any speed
-  const h = kind.peak * cw, hc = kind.carPeak * cw;
+  const hc = kind.carPeak * cw;
   f.active = true; f.t = 0; f.dur = dur; f.turns = kind.turns;
   // Parabola with explicit velocity/gravity so a mid-air upgrade to a double stays continuous.
-  f.y = 0; f.vy = 4 * h / dur; f.g = 8 * h / (dur * dur);
   f.cy = 0; f.cvy = 4 * hc / cdur; f.cg = 8 * hc / (cdur * cdur); f.carDelay = cd;
   f.theta = 0; f.thetaMax = TAU * kind.turns; f.omega = f.thetaMax / (dur * CFG.SPIN_FRAC);
   G.squashT = 0;
@@ -294,7 +357,6 @@ function startFlip(kind) {
 function upgradeToDouble() {
   const f = G.flip, K = CFG.DOUBLE, dur = K.dur / Math.pow(G.speedMul, CFG.SPEED_TIME_EXP), tau = dur - f.t;
   f.turns = 2; f.dur = dur;
-  f.g = 2 * (f.y + f.vy * tau) / (tau * tau);
   if (f.t >= f.carDelay) f.cg = 2 * (f.cy + f.cvy * tau) / (tau * tau);
   else { const hc = K.carPeak * L.carW, cdur = dur - f.carDelay; f.cvy = 4 * hc / cdur; f.cg = 8 * hc / (cdur * cdur); }
   f.thetaMax = TAU * 2; f.omega = (f.thetaMax - f.theta) / (tau * CFG.SPIN_FRAC);
@@ -303,7 +365,7 @@ function upgradeToDouble() {
 
 function land() {
   const f = G.flip;
-  f.active = false; f.y = f.cy = 0; f.theta = 0;
+  f.active = false; f.cy = 0; f.theta = 0;
   G.squashT = CFG.SQUASH.ms; G.shakeT = CFG.SHAKE.ms;
   spawnDust(L.playerX - L.carW * 0.33, L.groundY, 7, 1.2);
   spawnDust(L.playerX + L.carW * 0.33, L.groundY, 7, 1.2);
@@ -398,11 +460,12 @@ function addScore() {
 function startCrash() {
   const c = G.crash, f = G.flip, cw = L.carW;
   G.state = 'crash'; c.t = 0;
-  c.mx = L.muskFootX; c.my = L.groundY - L.carH - f.y - muskH() / 2;   // rider centre
+  updateCarPose(); updateRiderPose();
+  c.mx = L.muskFootX; c.my = RIDER.feetY - muskH() / 2;                 // rider centre
   c.mvx = cw * 1.3; c.mvy = -cw * 1.8; c.ma = 0; c.mav = 7;
   c.cx = L.playerX; c.cy = L.groundY - L.carH / 2 - f.cy;                 // car centre
   c.cvx = -cw * 0.7; c.cvy = -cw * 1.1; c.ca = 0; c.cav = -5;
-  f.active = false; f.y = f.cy = 0; G.queued = false;
+  f.active = false; f.cy = 0; G.queued = false;
   G.shakeT = CFG.SHAKE.ms * 2.5;
   spawnDust(L.playerX, L.groundY - L.carH, 16, 2);
   Snd.play('crash');
@@ -425,7 +488,7 @@ function updateCrash(dt) {
 
 function resetRun() {
   G.state = 'play'; G.score = 0; G.scoreStr = '0'; G.newBest = false; G.speedMul = 1; G.roadK = 1;
-  G.queued = false; G.squashT = 0; G.flip.active = false; G.flip.y = G.flip.cy = 0; G.flip.theta = 0;
+  G.queued = false; G.squashT = 0; G.flip.active = false; G.flip.cy = 0; G.flip.theta = 0;
   for (const o of G.obstacles) o.alive = false;
   for (const p of G.particles) p.life = 0;
   G.spawnDist = CFG.SCROLL_SPEED * L.carW * CFG.FIRST_SPAWN_S;
@@ -463,7 +526,8 @@ function spawnPop(text) {
   for (const p of G.pops) {
     if (p.alive) continue;
     p.alive = true; p.t = 0; p.text = text;
-    p.x = L.playerX + L.carW * 0.1; p.y = L.groundY - L.carH - muskH() - G.flip.y - L.carW * 0.1;
+    updateCarPose(); updateRiderPose();
+    p.x = L.playerX + L.carW * 0.1; p.y = RIDER.feetY - muskH() - L.carW * 0.1;
     return;
   }
 }
@@ -486,7 +550,6 @@ function update(dt) {
   const f = G.flip;
   if (f.active) {
     f.t += dt;
-    f.y += f.vy * dt; f.vy -= f.g * dt;
     if (f.t >= f.carDelay) { f.cy += f.cvy * dt; f.cvy -= f.cg * dt; }
     f.theta = Math.min(f.thetaMax, f.theta + f.omega * dt);
     if (f.t >= f.dur) land();
@@ -497,6 +560,10 @@ function update(dt) {
   }
   if (G.shakeT > 0) G.shakeT -= dt * 1000;
   if (G.btnT > 0) G.btnT -= dt * 1000;
+  if (G.state !== 'crash' && G.state !== 'over') {                     // wheels spin with the road, a bit slower in the air
+    G.wheelA += (v / Math.max(1, WHEELS[0].r)) * (f.active ? CFG.WHEEL_AIR_SPIN : 1) * dt;
+    if (G.wheelA > TAU) G.wheelA -= TAU;
+  }
 
   if (G.state === 'crash') updateCrash(dt);
   if (G.state === 'play' || G.state === 'crash' || G.state === 'over') updateObstacles(dt);
@@ -544,7 +611,7 @@ function render() {
   for (const o of G.obstacles) if (o.alive) { const sp = SPR[o.kind]; ctx.drawImage(sp.cv, o.x, L.groundY - o.h, o.w, o.h); }
 
   if (G.state === 'crash' || G.state === 'over') drawCrashed();
-  else { drawShadow(); drawCar(); drawMusk(); }
+  else { updateCarPose(); updateRiderPose(); drawShadow(); drawCar(); drawMusk(); }
   drawParticles();
   drawPops();
   if (DEBUG) drawDebug();
@@ -613,77 +680,92 @@ function drawShadow() {
   ctx.globalAlpha = 1;
 }
 
-function idleBob() { return Math.sin(G.time * TAU * CFG.BOB.hz) * CFG.BOB.px * 0.5; }
+function roadBob() { return Math.sin(G.time * TAU * CFG.BOB.hz) * CFG.BOB.px * 0.4; }
 
-/** Solid-body kickflip: the car is a box (height carH, depth BOX_DEPTH × carH) rotating about its
- *  long axis, seen from the side. Each visible face is drawn with its projected height and offset,
- *  back to front, always from a real sprite: near side → belly (tesla_bottom) → far side (darkened
- *  side view, upside-down) → roof (tesla_top). FACES is filled in place every frame:
- *  [depth toward viewer, screen-y of centre, projected half-height, kind]. */
-const FACE_NEAR = 0, FACE_BELLY = 1, FACE_FAR = 2, FACE_ROOF = 3;
-const FACES = [[0, 0, 0, FACE_NEAR], [0, 0, 0, FACE_BELLY], [0, 0, 0, FACE_FAR], [0, 0, 0, FACE_ROOF]];
-function setFace(f, depth, y, half) { f[0] = depth; f[1] = y; f[2] = half; }
+/* Car pose, shared by drawCar / drawMusk / crash / pops. Filled in place (no allocations). */
+const CAR = { cx: 0, cy: 0, topY: 0, tilt: 0, sy: 1, sx: 1, k: 0, kNext: 0, alphaNext: 0 };
+const RIDER = { feetY: 0, lean: 0, sy: 1, air: false };
 
-function drawCarFaces(theta) {
-  const Hh = L.carH * 0.5, Dh = L.carH * CFG.BOX_DEPTH * 0.5;
-  const s = Math.sin(theta), c = Math.cos(theta);
-  setFace(FACES[FACE_NEAR], Dh * c, -Dh * s, Hh * c);
-  setFace(FACES[FACE_BELLY], Hh * s, Hh * c, Dh * s);
-  setFace(FACES[FACE_FAR], -Dh * c, Dh * s, -Hh * c);
-  setFace(FACES[FACE_ROOF], -Hh * s, -Hh * c, -Dh * s);
-  for (let pass = 0; pass < 2; pass++) {              // two visible faces at most; draw the deeper one first
-    let best = null;
-    for (const f of FACES) if (f[0] > 0 && f[2] >= CFG.FACE_MIN_PX && (!best || f[0] < best[0])) best = f;
-    if (!best) break;
-    drawFace(best);
-    best[0] = -1;                                       // consumed
+function updateCarPose() {
+  const f = G.flip, C = CAR, ch = L.carH;
+  C.cx = L.playerX;
+  if (!f.active) {
+    const k = squashK();
+    C.sx = 1 + (CFG.SQUASH.x - 1) * k; C.sy = 1 - (1 - CFG.SQUASH.y) * k;
+    C.cy = L.groundY + roadBob(); C.tilt = 0; C.k = 0; C.alphaNext = 0;
+    C.topY = C.cy - ch * C.sy;
+    return;
+  }
+  const u = f.t / f.dur, step = TAU / 8;
+  const th = f.theta % TAU;
+  let k = Math.round(th / step) % 8;
+  let d = th - k * step; if (d > step / 2) d -= TAU; if (d < -step / 2) d += TAU;   // offset from the keyframe, ±22.5°
+  C.k = k; C.sx = 1;
+  C.sy = CFG.ROLL.squash + (1 - CFG.ROLL.squash) * Math.abs(Math.cos(2 * d));   // equal at both sides of a boundary → no pop
+  const edge = (step / 2) * (1 - CFG.ROLL.blend);
+  if (Math.abs(d) > edge) { C.kNext = (k + (d > 0 ? 1 : 7)) % 8; C.alphaNext = 0.5 * (Math.abs(d) - edge) / (step / 2 - edge); }
+  else C.alphaNext = 0;
+  C.tilt = -CFG.TILT_Z * Math.sin(TAU * u);              // nose up on takeoff, down on landing
+  C.cy = L.groundY - ch / 2 - f.cy;                      // car centre line
+  const fr = ROLL[k];
+  C.topY = C.cy - (fr.mid - fr.top) * C.sy;              // top edge of the drawn keyframe
+}
+
+function updateRiderPose() {
+  const f = G.flip, R = RIDER, sink = CFG.MUSK_SINK * L.carW;
+  if (f.active) {
+    const u = f.t / f.dur, arc = Math.sin(Math.PI * u);
+    R.feetY = CAR.topY - CFG.RIDER_GAP * L.carH * arc + sink;   // glued to the board, lifting ≤ 0.12 carH at the apex
+    R.lean = CAR.tilt + 0.5 * CFG.LEAN * arc;
+    R.sy = 1; R.air = u > 0.1 && u < 0.88;
+  } else {
+    const knees = CFG.IDLE.knees * (0.5 + 0.5 * Math.sin(G.time * TAU * CFG.IDLE.hz));
+    R.feetY = CAR.topY + sink; R.lean = 0; R.air = false;
+    R.sy = 1 - knees - 0.06 * squashK();
   }
 }
 
-function drawFace(f) {
-  const cw = L.carW, half = f[2], kind = f[3];
-  const sp = kind === FACE_NEAR ? SPR.tesla_side : kind === FACE_BELLY ? SPR.tesla_bottom
-    : kind === FACE_FAR ? SPR.tesla_side_dark : SPR.tesla_top;
-  ctx.save();
-  ctx.translate(0, f[1]);
-  ctx.scale(1, (kind === FACE_BELLY || kind === FACE_FAR ? -1 : 1) * half / (sp.h * 0.5));   // belly and far side are mirrored
-  ctx.drawImage(sp.cv, -cw / 2, -sp.h / 2, sp.w, sp.h);
-  ctx.restore();
+function drawRollFrame(k, alpha) {
+  const fr = ROLL[k], sp = fr.sp;
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(sp.cv, -L.carW / 2, -fr.mid, sp.w, sp.h);
+  if (fr.side) drawWheels(-L.carW / 2, -fr.mid, fr.flipped, sp.h);
+  ctx.globalAlpha = 1;
+}
+
+/** Spinning tyres on top of the baked ones; (ox, oy) = top-left of the side sprite in the current transform. */
+function drawWheels(ox, oy, flipped, spriteH) {
+  for (const w of WHEELS) {
+    ctx.save();
+    ctx.translate(ox + w.x, oy + (flipped ? spriteH - w.y : w.y));
+    ctx.rotate(flipped ? -G.wheelA : G.wheelA);
+    ctx.drawImage(w.cv, -w.r, -w.r, w.r * 2, w.r * 2);
+    ctx.restore();
+  }
 }
 
 function drawCar() {
-  const f = G.flip, cw = L.carW, ch = L.carH;
+  const C = CAR, sp = SPR.tesla_side;
   ctx.save();
-  if (f.active) {
-    const u = f.t / f.dur;
-    ctx.translate(L.playerX, L.groundY - ch / 2 - f.cy);
-    ctx.rotate(-CFG.TILT_Z * Math.sin(TAU * u));              // nose up on takeoff, down on landing
-    drawCarFaces(f.theta);
+  ctx.translate(C.cx, C.cy);
+  if (G.flip.active) {
+    ctx.rotate(C.tilt);
+    ctx.scale(1, C.sy);
+    drawRollFrame(C.k, 1);
+    if (C.alphaNext > 0) drawRollFrame(C.kNext, C.alphaNext);   // cross-fade near a keyframe boundary
   } else {
-    const k = squashK();
-    ctx.translate(L.playerX, L.groundY + idleBob());
-    ctx.scale(1 + (CFG.SQUASH.x - 1) * k, 1 - (1 - CFG.SQUASH.y) * k);
-    ctx.drawImage(SPR.tesla_side.cv, -cw / 2, -ch, cw, ch);
+    ctx.scale(C.sx, C.sy);
+    ctx.drawImage(sp.cv, -L.carW / 2, -L.carH, sp.w, sp.h);
+    drawWheels(-L.carW / 2, -L.carH, false, sp.h);
   }
   ctx.restore();
 }
 
 function drawMusk() {
-  const f = G.flip, sink = CFG.MUSK_SINK * L.carW;
-  let frame = SPR.musk_ride, feetY, lean = 0, sy = 1;
-  if (f.active) {
-    const u = f.t / f.dur;
-    feetY = L.groundY - L.carH - f.y;
-    lean = CFG.LEAN * Math.sin(Math.PI * u);
-    if (u > 0.1 && u < 0.88) frame = SPR.musk_air;
-  } else {
-    const k = squashK();
-    feetY = L.groundY - L.carH * (1 - (1 - CFG.SQUASH.y) * k) + idleBob();
-    sy = 1 - 0.06 * k;
-  }
+  const R = RIDER, frame = R.air ? SPR.musk_air : SPR.musk_ride;
   ctx.save();
-  ctx.translate(L.muskFootX, feetY + sink);
-  ctx.rotate(lean); ctx.scale(1, sy);
+  ctx.translate(L.muskFootX, R.feetY);
+  ctx.rotate(R.lean); ctx.scale(1, R.sy);
   ctx.drawImage(frame.cv, -frame.w / 2, -frame.h, frame.w, frame.h);
   ctx.restore();
 }
@@ -869,4 +951,5 @@ window.TF = {
   G, L, CFG, SPR,
   tap: () => onTap(-1, -1), spawnObstacle, resetRun,
   step: (n = 1) => { for (let i = 0; i < n; i++) update(CFG.FIXED_DT); },
+  pose: () => { updateCarPose(); updateRiderPose(); return { carTop: CAR.topY, feetY: RIDER.feetY, k: CAR.k, sy: CAR.sy }; },
 };

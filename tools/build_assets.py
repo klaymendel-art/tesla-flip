@@ -18,6 +18,18 @@ def save(im, name, quant=False):
     print(f"{name:18s} {im.size[0]}x{im.size[1]}  {p.stat().st_size//1024} KB")
     return im
 
+def strip_ground_rows(im, frac=0.35, max_rows=10):
+    """leftover ground line: bottom rows whose opaque width exceeds `frac` of the sprite width (tyre contact
+    patches never do) are cleared together with every row below them, then the sprite is re-trimmed so the
+    wheels end exactly on the bottom edge"""
+    a = np.asarray(im).copy(); h, w = a.shape[:2]
+    line_rows = [y for y in range(h - 1, h - 1 - max_rows, -1) if (a[y, :, 3] > 8).sum() > frac * w]
+    if not line_rows: return im
+    top = min(line_rows); a[top:, :, 3] = 0
+    out = Image.fromarray(a, "RGBA").crop(Image.fromarray(a, "RGBA").getbbox())
+    print(f"  stripped ground line: rows {top}..{h-1} cleared, new height {out.height}")
+    return out
+
 def strip_soft_bottom(im):
     """drop feathered bottom rows so a tiled ground layer has a hard base edge"""
     a = np.asarray(im)[:, :, 3]
@@ -33,11 +45,30 @@ def tile_mirror(im, width=2048):
     return m.resize((width, h), L)
 
 # --- Musk: ride pose normalised to 900 px tall; air pose scaled so head size matches (measured face h 286 vs 252)
-ride = Image.open(RAW / "musk_ride_cut.png").convert("RGBA")
+ride = Image.open(RAW / "musk_ride3_cut.png").convert("RGBA")  # v3 skate stance (pro model), feet levelled
 s_ride = 900 / ride.height
 ride = ride.resize((round(ride.width * s_ride), 900), L)
-air = Image.open(RAW / "musk_air_cut.png").convert("RGBA")
-s_air = s_ride * (286 / 252)
+air = Image.open(RAW / "musk_air3_cut.png").convert("RGBA")  # v3 tuck
+# enclosed white between the tucked legs -> transparent; keep the white shoe soles (components reaching the bottom 10%)
+import sys; sys.path.insert(0, "tools"); from cutout import enclosed_bottom_components, border_flood
+_a = np.asarray(air).astype(np.int16); _nw = (_a[..., 3] > 128) & (_a[..., :3].min(axis=2) >= 225)
+_bg = np.zeros_like(_nw); _m = enclosed_bottom_components(_nw, _bg, bottom_frac=1.0, min_px=40)
+_h = _nw.shape[0]; _keep = np.zeros_like(_m)
+from collections import deque as _dq
+_seen = np.zeros_like(_m)
+for _y0, _x0 in zip(*np.nonzero(_m)):
+    if _seen[_y0, _x0]: continue
+    _q = _dq([(_y0, _x0)]); _seen[_y0, _x0] = True; _c = []
+    while _q:
+        _y, _x = _q.popleft(); _c.append((_y, _x))
+        for _ny, _nx in ((_y-1,_x),(_y+1,_x),(_y,_x-1),(_y,_x+1)):
+            if 0 <= _ny < _h and 0 <= _nx < _m.shape[1] and _m[_ny, _nx] and not _seen[_ny, _nx]: _seen[_ny, _nx] = True; _q.append((_ny, _nx))
+    if max(c[0] for c in _c) >= _h * 0.9 or min(c[0] for c in _c) < _h * 0.62:  # soles, and anything above the legs (shirt print)
+        for _y, _x in _c: _keep[_y, _x] = True
+_m &= ~_keep
+_arr = np.asarray(air).copy(); _arr[..., 3][_m] = 0; air = Image.fromarray(_arr, "RGBA")
+print(f"musk_air: cleared {int(_m.sum())} enclosed white px between the legs, kept {int(_keep.sum())} sole px")
+s_air = s_ride * 0.925  # v3 air head is ~8% larger than v3 ride head -> equalise
 air = air.resize((round(air.width * s_air), round(air.height * s_air)), L)
 save(ride, "musk_ride.png", quant=True); save(air, "musk_air.png", quant=True)
 
@@ -55,6 +86,7 @@ def drop_ground_line(im, max_h=14):
     return im
 side = drop_ground_line(Image.open(RAW / "roadster_side_cut.png").convert("RGBA"))
 side = side.resize((900, round(side.height * 900 / side.width)), L)
+side = strip_ground_rows(side)
 bot = Image.open(RAW / "roadster_bottom_cut.png").convert("RGBA")
 bot = bot.resize((900, round(bot.height * 900 / bot.width)), L)
 save(side, "tesla_side.png", quant=True); save(bot, "tesla_bottom.png", quant=True)
@@ -110,7 +142,7 @@ def paint_enclosed_white(im, top_frac=0.6, min_px=1500):
 for n, w in (("obst_muscle", 940), ("obst_pickup", 1000), ("obst_sedan", 900)):
     im = clean_bottom_rows(drop_ground_line(Image.open(RAW / f"{n}_cut.png").convert("RGBA")))
     if n == "obst_muscle": im = paint_enclosed_white(im)
-    im = im.resize((w, round(im.height * w / im.width)), L)
+    im = strip_ground_rows(im.resize((w, round(im.height * w / im.width)), L))
     save(im, f"{n}.png", quant=True)
     aa = np.asarray(im)[:, :, 3] > 128
     print(f"  {n}: wheel bottom row y={int(np.where(aa.any(axis=1))[0].max())} of {im.height}")
