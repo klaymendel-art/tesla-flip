@@ -209,3 +209,51 @@ Natural spawning, 240 s autopilot: 143 spawns, 34 pairs (gap 0.31–0.44 carW, b
 
 ## Verdict
 **SHIP v0.2.** For v0.3: N1 (stacked-car frames), N2 (speed-scaled flight), then D9 (skate stance) and N3/N4.
+---
+
+# Round 3 (v0.3, commit ace0632) — regression pass, final
+
+Scope as requested: flip burst at 1.0× and 1.6×, timing re-sweep at three speeds, FPS/heap at 390×844, console on five viewports, Pages parity, `.env`. Same harness; runs executed sequentially this time (no server contention). Evidence: `qa/screenshots/qa3_*.png` (46 shots).
+
+## Final score table
+
+| # | Area | R1 | R2 | R3 | Verdict |
+|---|------|----|----|----|---------|
+| 1 | Visual / art direction | 6 | 7 | **8** | Flip is now a single solid object in every frame at both speeds: side → side+belly sliver → belly-up → belly+roof → roof (new `tesla_top.png`, a proper plan view) → side. No slabs, no blank rectangles, no stacked cars. Reads as a kickflip. Remaining: standing rider pose (D9). |
+| 2 | Gameplay / feel | 6 | 7 | **7** | Difficulty no longer inverts: single windows stay 225–325 ms (muscle/sedan) across 1.0×/1.28×/1.6×, pairs are never single-clearable (one 25 ms fluke at 1.6×), pair-doubles 175–250 ms at all speeds, warning time shrinks 0.82 → 0.51 s. Short of 8 because the pickup single window dips to 175 ms at 1.28× and the double still dominates over single cars (450–950 ms). |
+| 3 | Mobile engineering | 8 | 8 | **8** | FPS avg 100 / min 95 / 0 frames > 25 ms (15 s, isolated); heap 1.8–2.3 MB flat over 60 s, DOM nodes 65 / listeners 46 constant; 0 console messages on all five viewports; first load 1.74 MB / 25 requests. |
+| 4 | Audio | 7 | 8 | **8** | `theme.ogg` 809 KB (was 930), still decodes; flip whoosh rate now follows the shorter flight (capped 1.3×) — verified in code, not audible here. |
+| 5 | Code quality | 8 | 8 | **8** | `drawCarFaces()` is allocation-free (module-level `FACES`, `setFace` mutates in place); `SPEED_TIME_EXP`, `BOX_DEPTH`, `FACE_MIN_PX`, `GAP_SLACK` in distance units — all in `CFG`. Note: v0.3 normalised `game.js` line endings CRLF → LF, so the raw diff is 1 713 lines; the real change is 101 lines. |
+| 6 | Repo / deploy | 8 | 9 | **9** | Pages serves v0.3 byte-for-byte (md5 match on `game.js`, `theme.ogg` 809 058 B, `tesla_top.png` 200). `.env` untracked. |
+
+**Ship / don't ship: SHIP v0.3.** Nothing below 7; no regressions found.
+
+## Claims vs measurements
+
+| Claim (dev) | Measured | Status |
+|---|---|---|
+| N1: every flip frame one car, no slabs | 11-frame bursts at 1.0× (dur 1.00 s) and 1.6× (dur 0.70 s) + 7-frame doubles (1.35 s / 0.95 s): one coherent object per frame, belly and roof are real sprites, far side darkened. `qa3_flip_1.0x_00…10.png`, `qa3_flip_1.6x_*.png`, `qa3_flipdbl_*.png`. | **verified** |
+| N2: singles 275–350 ms (pickup 225–250) at all speeds | 1.0×: 275 / 225 / 325 ms (muscle / pickup / sedan). 1.28×: 275 / **175** / 325 ms. 1.6×: 225 / 200 / 275 ms. | **mostly** — pickup at 1.28× is 175 ms, below both the claim and the 200 ms target (see R3-1) |
+| N2: pair-doubles 200–250 ms, pairs never single-clearable | Pair doubles (+80 ms): 1.0× 150–225, 1.28× 200–250, 1.6× 175–250 ms. Single over a pair: NEVER at 1.0× and 1.28×; at 1.6× one isolated 25 ms slot for se+mu@0.30. | **verified** (the 0.33 carW minimum pair gap in production removes the 0.30 case anyway) |
+| N3: zero allocations in `drawCarFaces` | Code read: `FACES` constant, `setFace()` writes three numbers, `drawFace()` takes a row. Heap flat. | **verified** |
+| N4: theme.ogg 809 KB | 809 058 B locally and on Pages. | **verified** |
+| Natural spawning still fair | 240 s autopilot at ramping speed: 195 spawns, 55 pairs (gap 0.33–0.45 carW), 0 pairs before score 4, 0 overlaps, 0 crashes, first obstacle 1.62 s after retry. | **verified** |
+
+## Timing table v0.3 (lead before hitbox contact; 25 ms sweep; "dbl" = second tap +80 ms)
+
+| Speed | Warning | Single muscle / pickup / sedan | Double over one car | Pair single | Pair double @0.30 / 0.375 / 0.45 |
+|---|---|---|---|---|---|
+| 1.0× | 0.82 s | 275 / 225 / 325 ms | 575–675 ms | never | 200–225 / 175–200 / 150–175 ms |
+| 1.28× | 0.64 s | 275 / 175 / 325 ms | 475–625 ms | never | 250 / 200–225 / 200–225 ms |
+| 1.6× | 0.51 s | 225 / 200 / 275 ms | 450–950 ms | never (one 25 ms slot) | 225–250 / 200–225 / 175–200 ms |
+
+Flight at 1.6×: single 0.70 s, double 0.95 s (`dur / speedMul^0.75`).
+
+## Open items (none blocking)
+
+- **R3-1 · should-fix (tune, 5 min):** pickup single window 175 ms at 1.28×. Raise the cab box top in `CFG.HITBOX.obst_pickup[1]` from 0.94 to ≈ 0.88, or `SPEED_TIME_EXP` 0.75 → 0.7; re-sweep for ≥ 200 ms at every speed.
+- **R3-2 · nice:** double still dominates over single cars (450–950 ms vs 225–325). Acceptable for a toy; a score bonus for singles or a slightly longer post-double recovery gap would give the choice meaning.
+- **D9 · nice (art):** rider is still in a standing pose.
+- **Housekeeping:** `qa/screenshots/*.png` are git-ignored, so none of the three rounds' evidence is in the repo; keep the local copies or un-ignore a curated subset.
+
+**Final verdict: SHIP v0.3.**

@@ -54,7 +54,7 @@ const CFG = {
   OBST_KINDS: ['obst_muscle', 'obst_pickup', 'obst_sedan'],
   HITBOX: {
     obst_muscle: [{ x1: 0.06, x2: 0.35, top: 0.70 }, { x1: 0.35, x2: 0.75, top: 0.94 }, { x1: 0.75, x2: 0.90, top: 0.70 }],
-    obst_pickup: [{ x1: 0.06, x2: 0.25, top: 0.64 }, { x1: 0.25, x2: 0.55, top: 0.94 }, { x1: 0.55, x2: 0.90, top: 0.74 }],
+    obst_pickup: [{ x1: 0.06, x2: 0.25, top: 0.64 }, { x1: 0.25, x2: 0.55, top: 0.88 }, { x1: 0.55, x2: 0.90, top: 0.74 }],
     obst_sedan:  [{ x1: 0.06, x2: 0.30, top: 0.60 }, { x1: 0.30, x2: 0.75, top: 0.94 }, { x1: 0.75, x2: 0.90, top: 0.64 }],
   },
   PLAYER_SHRINK: 0.15, PLAYER_LENIENCY: 0.08,  // AABB inset; leniency lifts the player's bottom (in carW)

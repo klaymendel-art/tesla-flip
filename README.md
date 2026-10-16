@@ -6,6 +6,19 @@ Tiny mobile-first browser game: a cartoon Elon rides a miniature Tesla Roadster 
 - Stack: vanilla HTML5 Canvas 2D, no frameworks, no build step.
 - Art generated via OpenRouter (Gemini image models), audio synthesised procedurally with Python/numpy.
 
+
+## Screenshots
+
+| Title | Kickflip | Double flip over a pair |
+|---|---|---|
+| ![title](docs/screenshots/title.png) | ![flip](docs/screenshots/flip.png) | ![pair](docs/screenshots/pair.png) |
+
+![flip burst](docs/screenshots/flip_burst.png)
+
+## How it was made
+
+Built in one session by a producer session coordinating five agents (dev, art, SFX, music, QA). The QA agent ran three review rounds with pixel and timing measurements — see `qa/REPORT.md`. Art via OpenRouter image models (≈ $1 total), audio synthesised with numpy; everything is re-renderable from `tools/`.
+
 ## Controls
 
 | Input | Action |
