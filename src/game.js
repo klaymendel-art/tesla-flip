@@ -20,7 +20,7 @@ const CFG = {
   LAYER_REF_H: 1920,            // bg layers are authored for a 1920 px-tall portrait frame
   NEAR_FIT: [0.9, 1.6],         // bg_near is stretched to fill horizon→kerb, within these × of layer scale
   LAYOUT: {                     // fractions of screen height / width
-    portrait: { horizon: 0.66, ground: 0.80, carWFrac: 0.27, playerX: 0.24 },
+    portrait: { horizon: 0.56, ground: 0.70, carWFrac: 0.27, playerX: 0.24 },   // rider near the vertical centre
     landscape: { horizon: 0.62, ground: 0.82, carWFrac: 0.20, playerX: 0.28 },
     curb: 0.025, dash: 0.38, farLift: 0.07,       // kerb height, dash row inside the road, bg_far raised above horizon
     sun: { x: 0.72, up: 0.16, r: 0.07 },          // r × min(W,H); up × H above the horizon
@@ -71,7 +71,10 @@ const CFG = {
   PUFF_EVERY: [0.7, 1.8], PUFF_AT: { x: 0.93, y: 0.12 },
   CRASH_S: 0.8,
   POOL: { particles: 96, lines: 12, pops: 4, obstacles: 6 },
-  KEY_BEST: 'teslaflip.best',
+  KEY_BEST: 'teslaflip.best', KEY_TUTORIAL: 'teslaflip.tutorialDone',
+  // First-run tutorial: fixed spawns (three singles, then a close pair) with a "DOUBLE TAP!" hint and slow motion
+  // until the player clears a pair once. Slow motion is a true world time-scale so jump geometry is unchanged.
+  TUTORIAL: { kinds: ['obst_muscle', 'obst_sedan', 'obst_pickup'], pairGap: 0.38, pairLead: 1.5, slow: 0.6, easeS: 0.4, pulseHz: 2.5 },
 };
 
 const IMG_FILES = {
@@ -189,6 +192,7 @@ function layout() {
   fs('btn', L.btn.r * 0.5); fs('pop', clamp(m * 0.08, 20, 44));
   const panel = clamp(m * 0.11, 26, 64);
   fs('panel', panel * 0.8); fs('panelS', panel * 0.45); fs('panelTap', panel * 0.52);
+  fs('tutorial', clamp(m * 0.1, 24, 64));
   L.panelUnit = panel; L.titleSize = title;
 
   L.sky = ctx.createLinearGradient(0, 0, 0, L.horizonY);
@@ -324,13 +328,15 @@ const G = {
   crash: { t: 0, mx: 0, my: 0, mvx: 0, mvy: 0, ma: 0, mav: 0, cx: 0, cy: 0, cvx: 0, cvy: 0, ca: 0, cav: 0 },
   particles: [], lines: [], pops: [], obstacles: [],
   paused: false,                 // QA hook: freezes the rAF physics so TF.step() can drive it
+  timeScale: 1, timeTarget: 1,   // world time-scale (tutorial slow motion), eased in real time in frame()
+  tut: { done: false, active: false, spawns: 0, hint: false, pair1: null, pair2: null },
 };
 for (let i = 0; i < CFG.POOL.particles; i++) G.particles.push({ life: 0, max: 1, x: 0, y: 0, vx: 0, vy: 0, r: 1, smoke: false });
 for (let i = 0; i < CFG.POOL.lines; i++) G.lines.push({ x: 0, y: 0, len: 0, spd: 1, a: 0.2 });
 for (let i = 0; i < CFG.POOL.pops; i++) G.pops.push({ alive: false, x: 0, y: 0, t: 0, text: '' });
 for (let i = 0; i < CFG.POOL.obstacles; i++) G.obstacles.push({ alive: false, kind: 'obst_sedan', x: 0, w: 0, h: 0, scored: false, puffT: 0 });
 
-try { G.best = parseInt(localStorage.getItem(CFG.KEY_BEST), 10) || 0; } catch (e) { /* storage blocked */ }
+try { G.best = parseInt(localStorage.getItem(CFG.KEY_BEST), 10) || 0; G.tut.done = localStorage.getItem(CFG.KEY_TUTORIAL) === '1'; } catch (e) { /* storage blocked */ }
 G.bestStr = 'BEST ' + G.best;
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -398,13 +404,20 @@ function lowKind() { return Math.random() < 0.5 ? 'obst_muscle' : 'obst_sedan'; 
 /** Spawns the next obstacle — or a close pair (both cars at once, so the pair is readable the
  *  moment it enters the screen; it needs the double flip) — and schedules the one after it. */
 function spawnNext() {
-  const first = spawnObstacle(G.nextKind);
+  const T = G.tut, TC = CFG.TUTORIAL, tutPair = T.active && T.spawns === 3;
+  if (T.active && T.spawns < 3) { G.nextKind = TC.kinds[T.spawns]; G.nextPair = false; }
+  if (tutPair) { G.nextKind = lowKind(); G.nextPair = true; }
+  // The tutorial pair starts further out so the hint has time to register before it is on screen.
+  const first = spawnObstacle(G.nextKind, tutPair ? L.W + L.carW * TC.pairLead : undefined);
   if (!first) return;
   let span = first.w, wasPair = false;
   if (G.nextPair) {
-    const partner = spawnObstacle(lowKind(), first.x + first.w + rand(CFG.PAIR_GAP[0], CFG.PAIR_GAP[1]) * L.carW);
+    const gap = tutPair ? TC.pairGap : rand(CFG.PAIR_GAP[0], CFG.PAIR_GAP[1]);
+    const partner = spawnObstacle(lowKind(), first.x + first.w + gap * L.carW);
     if (partner) { span = partner.x + partner.w - first.x; wasPair = true; }
+    if (tutPair && partner) { T.pair1 = first; T.pair2 = partner; T.hint = true; G.timeTarget = TC.slow; }
   }
+  if (T.active) T.spawns++;
   // Minimum gap is a distance (flip length at 1.0× + slack), so it stays fair at any speed.
   const flipDur = wasPair ? CFG.DOUBLE.dur : CFG.FLIP.dur;     // recovering from a double takes longer
   const minGap = (CFG.SCROLL_SPEED * flipDur + CFG.GAP_SLACK) * L.carW;
@@ -439,7 +452,11 @@ function updateObstacles(dt) {
     o.puffT -= dt;
     if (o.puffT <= 0) { o.puffT = rand(CFG.PUFF_EVERY[0], CFG.PUFF_EVERY[1]); spawnSmoke(o.x + o.w * CFG.PUFF_AT.x, L.groundY - o.h * CFG.PUFF_AT.y); }
     if (G.state !== 'play') continue;
-    if (!o.scored && o.x + o.w < L.playerX) { o.scored = true; addScore(); }
+    if (!o.scored && o.x + o.w < L.playerX) {
+      o.scored = true; addScore();
+      if (o === G.tut.pair2) tutorialDone();
+      if (o === G.tut.pair1) endTutorialHint();
+    }
     for (const b of CFG.HITBOX[o.kind]) {
       if (o.x + o.w * b.x1 < px2 && o.x + o.w * b.x2 > px1 && pBottom > L.groundY - o.h * b.top) { startCrash(); break; }
     }
@@ -466,7 +483,7 @@ function startCrash() {
   c.mvx = cw * 1.3; c.mvy = -cw * 1.8; c.ma = 0; c.mav = 7;
   c.cx = L.playerX; c.cy = L.groundY - L.carH / 2 - f.cy;                 // car centre
   c.cvx = -cw * 0.7; c.cvy = -cw * 1.1; c.ca = 0; c.cav = -5;
-  f.active = false; f.cy = 0; G.queued = false;
+  f.active = false; f.cy = 0; G.queued = false; endTutorialHint();
   G.shakeT = CFG.SHAKE.ms * 2.5;
   spawnDust(L.playerX, L.groundY - L.carH, 16, 2);
   Snd.play('crash');
@@ -494,8 +511,22 @@ function resetRun() {
   for (const p of G.particles) p.life = 0;
   G.spawnDist = CFG.SCROLL_SPEED * L.carW * CFG.FIRST_SPAWN_S;
   G.nextPair = false; G.nextKind = lowKind();
+  const T = G.tut; T.active = !T.done; T.spawns = 0; T.pair1 = T.pair2 = null; endTutorialHint(); G.timeScale = 1;
   Snd.startLoop('roll');
   Snd.duckMusic(false);
+}
+
+/* Tutorial ----------------------------------------------------------------- */
+function endTutorialHint() { G.tut.hint = false; G.timeTarget = 1; }
+function tutorialDone() {
+  const T = G.tut;
+  T.done = true; T.active = false; endTutorialHint();
+  try { localStorage.setItem(CFG.KEY_TUTORIAL, '1'); } catch (e) { /* ignore */ }
+}
+/** QA hook: force the tutorial on (clears the flag) or mark it done. */
+function setTutorial(on) {
+  G.tut.done = !on;
+  try { if (on) localStorage.removeItem(CFG.KEY_TUTORIAL); else localStorage.setItem(CFG.KEY_TUTORIAL, '1'); } catch (e) { /* ignore */ }
 }
 
 /* Particles ---------------------------------------------------------------- */
@@ -618,6 +649,7 @@ function render() {
   if (DEBUG) drawDebug();
 
   drawHUD();
+  if (G.tut.hint && G.state === 'play') drawTutorialHint();
   if (G.state === 'title') drawTitle();
   if (G.state === 'over') drawGameOver();
 }
@@ -852,8 +884,17 @@ function drawTitle() {
     ctx.fillStyle = 'rgba(27,20,48,0.6)'; roundRect(tx - pw / 2, hy - hint * 0.6, pw, ph, 12); ctx.fill();
   }
   drawText('TAP = KICKFLIP · DOUBLE TAP = DOUBLE FLIP', tx, hy, 'hint', COLORS.lilac);
-  drawText("DON'T HIT THE V8s", tx, hy + hint * 1.5, 'hint', COLORS.lilac);
+  drawText(G.tut.done ? "DON'T HIT THE V8s" : 'DOUBLE TAP = 2 CARS', tx, hy + hint * 1.5, 'hint', COLORS.lilac);
   if (G.best > 0) drawText(G.bestStr, W / 2, L.safe.t + 12, 'best', COLORS.gold);
+}
+
+/** "DOUBLE TAP!" pulsing above the rider while the tutorial pair approaches. */
+function drawTutorialHint() {
+  const size = L.fonts.tutorial.size, pulse = 1 + 0.06 * Math.sin(G.time * TAU * CFG.TUTORIAL.pulseHz);
+  const x = Math.max(size * 3.4, L.playerX), y = RIDER.feetY - muskH() - L.H * 0.05 - size;
+  ctx.save(); ctx.translate(x, y); ctx.scale(pulse, pulse);
+  drawText('DOUBLE TAP!', 0, -size / 2, 'tutorial', '#fff');
+  ctx.restore();
 }
 
 function drawGameOver() {
@@ -894,7 +935,7 @@ function onTap(x, y) {
   if (x >= 0 && x >= L.mute.x && x <= L.mute.x + L.mute.s && y >= L.mute.y && y <= L.mute.y + L.mute.s) { Snd.toggleMute(); return; }
   G.btnT = 120;
   if (G.state === 'title') { resetRun(); tryFlip(); return; }
-  if (G.state === 'play') { tryFlip(); return; }
+  if (G.state === 'play') { if (G.tut.hint) endTutorialHint(); tryFlip(); return; }
   if (G.state === 'over') resetRun();           // 'crash' ignores taps so the panel can't be skipped by accident
 }
 
@@ -925,8 +966,11 @@ function frame(ts) {
   let dt = (ts - lastTs) / 1000; lastTs = ts;
   if (dt > CFG.MAX_FRAME_DT) dt = CFG.MAX_FRAME_DT;
   if (!G.paused) {
+    // tutorial slow motion: ease the world time-scale in real time, then step physics in world time
+    const k = (1 - CFG.TUTORIAL.slow) / CFG.TUTORIAL.easeS * dt;
+    G.timeScale = G.timeScale < G.timeTarget ? Math.min(G.timeTarget, G.timeScale + k) : Math.max(G.timeTarget, G.timeScale - k);
     acc += dt;
-    while (acc >= CFG.FIXED_DT) { update(CFG.FIXED_DT); acc -= CFG.FIXED_DT; }
+    while (acc >= CFG.FIXED_DT) { update(CFG.FIXED_DT * G.timeScale); acc -= CFG.FIXED_DT; }
   }
   render();
 }
@@ -950,7 +994,7 @@ document.addEventListener('visibilitychange', () => {
 // QA hook: state inspection, deterministic spawns and stepping (set TF.G.paused = true, then TF.step(n)).
 window.TF = {
   G, L, CFG, SPR,
-  tap: () => onTap(-1, -1), spawnObstacle, resetRun,
+  tap: () => onTap(-1, -1), spawnObstacle, resetRun, setTutorial,
   step: (n = 1) => { for (let i = 0; i < n; i++) update(CFG.FIXED_DT); },
   pose: () => { updateCarPose(); updateRiderPose(); return { carTop: CAR.topY, feetY: RIDER.feetY, k: CAR.k, sy: CAR.sy }; },
 };

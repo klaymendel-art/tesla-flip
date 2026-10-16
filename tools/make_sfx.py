@@ -133,7 +133,8 @@ def remove_dc(x):
 
 def finish_oneshot(x, fin, fout, drive=1.3, peak_db=ONESHOT_PEAK_DB):
     x = remove_dc(x)
-    x = soft_clip(x, drive)
+    if drive:                       # drive=None -> no saturation at all
+        x = soft_clip(x, drive)
     x = fades(x, fin, fout)
     x = x - x.mean(axis=0)          # kill residual DC
     x = fades(x, 0.0005, 0.0005)    # re-zero the edges after the shift
@@ -215,27 +216,34 @@ def make_roll():
 
 
 def make_pop():
+    """Soft, round "bubble pop" for the tap (owner feedback: no hard knock).
+    Pure sine bloop gliding DOWN 900 -> 350 Hz, soft attack, smooth decay,
+    a whisper of 2nd harmonic and a faint low-passed air puff. No clicks,
+    no resonators, no saturation."""
     rng = np.random.default_rng(202)
-    t = tvec(0.30)
+    t = tvec(0.28)
     n = len(t)
 
-    # transient click: 5 ms bright noise burst
-    click = svf(rng.standard_normal(n), 2500, 0.8, "hp") * env_exp(t, 0.0, 0.0012, 0.0002)
-    click *= (t < 0.005)
-    # wooden body: two damped resonances
-    wood = (0.55 * np.sin(2 * np.pi * 820 * t) * env_exp(t, 0, 0.012, 0.0003)
-            + 0.30 * np.sin(2 * np.pi * 1730 * t) * env_exp(t, 0, 0.006, 0.0003))
-    # pitched thump 150 -> 60 Hz over 60 ms
-    ph, _ = glide_phase(150, 60, t, 0.060)
-    thump = saturate(np.sin(ph), 2.0) * env_exp(t, 0.0, 0.035, 0.001)
-    # start of a whoosh: band-passed noise, centre freq rising 500 -> 1.4 kHz,
-    # level swelling to ~0.18 s and easing off so the file ends quietly
-    ramp = np.clip((t - 0.03) / 0.27, 0, 1)
-    wenv = np.sin(np.pi * np.clip((t - 0.03) / 0.30, 0, 1)) ** 1.5
-    whoosh = bp4(rng.standard_normal(n), 500 + 900 * ramp, 1.0) * wenv
+    # pitch: exponential glide 900 -> 350 Hz over 100 ms + tiny fading wobble
+    frac = np.clip(t / 0.100, 0, 1)
+    f = 900.0 * (350.0 / 900.0) ** frac
+    f *= 1 + 0.012 * np.sin(2 * np.pi * 22 * t) * np.exp(-t / 0.06)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    tone = np.sin(ph) + 0.06 * np.sin(2 * ph + 0.3)
 
-    x = 0.9 * click + 0.7 * wood + 1.0 * thump + 0.55 * whoosh
-    return finish_oneshot(x, 0.0005, 0.040)
+    # 4 ms raised-cosine attack, exponential decay (~-55 dB at 0.22 s)
+    att = 0.004
+    a = np.where(t < att, 0.5 - 0.5 * np.cos(np.pi * np.clip(t / att, 0, 1)), 1.0)
+    env = a * np.exp(-np.maximum(t - att, 0) / 0.035)
+    bloop = tone * env
+
+    # faint air puff: noise low-passed < 1.2 kHz, 30 ms, -18 dB vs the bloop
+    puff = svf(svf(rng.standard_normal(n), 1000, 0.707, "lp"), 1000, 0.707, "lp")
+    pw = np.clip(t / 0.030, 0, 1)
+    puff *= np.sin(np.pi * pw) ** 2 * (t <= 0.030)
+    puff *= db2lin(-18) * np.max(np.abs(bloop)) / np.max(np.abs(puff))
+
+    return finish_oneshot(bloop + puff, 0.0, 0.050, drive=None)
 
 
 def make_flip():
@@ -277,18 +285,18 @@ def make_land():
     knock = np.sin(2 * np.pi * 210 * t) * env_exp(t, 0.0, 0.015, 0.0008)
     thwack = svf(rng.standard_normal(n), 700, 0.7, "lp") * env_exp(t, 0, 0.008, 0.0005)
 
-    # wheel chirp: 40 ms noise burst, band-pass 3 kHz -> 1.6 kHz, fairly tight
+    # wheel chirp: 40 ms noise burst, band-pass 2 kHz -> 1 kHz (softened to sit with the bubble pop)
     t0, cl = 0.008, 0.040
     w = np.clip((t - t0) / cl, 0, 1)
     chirp_env = np.sin(np.pi * w) ** 2 * ((t >= t0) & (t <= t0 + cl))
-    chirp = svf(rng.standard_normal(n), 3000 * (1600 / 3000) ** w, 6.0, "bp") * chirp_env
+    chirp = svf(rng.standard_normal(n), 2000 * (1000 / 2000) ** w, 6.0, "bp") * chirp_env
 
     # subtle metallic clank: inharmonic partials (ratio ~1.575)
     clank = (np.sin(2 * np.pi * 1530 * t) * env_exp(t, 0.003, 0.045, 0.0005)
              + 0.7 * np.sin(2 * np.pi * 2410 * t + 0.5) * env_exp(t, 0.003, 0.030, 0.0005)
              + 0.25 * np.sin(2 * np.pi * 3970 * t + 1.3) * env_exp(t, 0.003, 0.015, 0.0005))
 
-    x = 1.0 * thud + 0.30 * knock + 0.35 * thwack + 0.55 * chirp + 0.10 * clank
+    x = 1.0 * thud + 0.30 * knock + 0.35 * thwack + 0.39 * chirp + 0.10 * clank   # chirp -3 dB
     return finish_oneshot(x, 0.0005, 0.030)
 
 
