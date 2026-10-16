@@ -27,13 +27,13 @@ const SOUND_FILES = {
 
 const Snd = {
   KEY_MUTE: 'teslaflip.muted',
-  VOL: { music: 0.6, sfx: 0.9, roll: 0.8 },  // roll is mastered quiet (-14 dBFS)
+  VOL: { music: 0.6, musicDucked: 0.35, sfx: 0.9, roll: 0.8 },  // roll is mastered quiet (-14 dBFS)
   VOICES: 8,
 
   ctx: null, master: null, musicBus: null, sfxBus: null,
   voices: [], voiceIdx: 0,
   buffers: {},       // name → AudioBuffer (absent/undefined when missing)
-  loops: {},         // name → running AudioBufferSourceNode
+  loops: {},         // name → { src, g } of a running loop
   exts: ['.mp3', '.ogg'],
   unlocked: false,
   muted: false,
@@ -54,6 +54,10 @@ const Snd = {
     this.sfxBus = this._gain(this.VOL.sfx, this.master);
     for (let i = 0; i < this.VOICES; i++) this.voices.push(this._gain(1, this.sfxBus));
 
+    if (location.protocol === 'file:') {   // fetch() is blocked on file:// — don't spam the console with CORS errors
+      console.warn('[TeslaFlip] audio needs http(s); running silently from file://');
+      return;
+    }
     for (const name of Object.keys(SOUND_FILES)) this._load(name);
   },
 
@@ -83,7 +87,7 @@ const Snd = {
       return;
     }
     // Loop files that finished decoding after the first gesture start right away.
-    if (this.unlocked && (name === 'theme' || name === 'roll')) this._startLoop(name);
+    if (this.unlocked && (name === 'theme' || name === 'roll')) this.startLoop(name);
   },
 
   /** Call synchronously inside the first pointer/key handler. */
@@ -91,19 +95,36 @@ const Snd = {
     if (!this.ctx || this.unlocked) return;
     this.unlocked = true;
     if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
-    this._startLoop('theme');
-    this._startLoop('roll');
+    this.startLoop('theme');
+    this.startLoop('roll');
   },
 
-  _startLoop(name) {
-    if (!this.buffers[name] || this.loops[name]) return;
+  /** Start a gapless loop (no-op if already running, not unlocked yet, or the file is missing). */
+  startLoop(name) {
+    if (!this.ctx || !this.unlocked || !this.buffers[name] || this.loops[name]) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffers[name];
     src.loop = true;
     const g = this._gain(name === 'roll' ? this.VOL.roll : 1, name === 'theme' ? this.musicBus : this.sfxBus);
     src.connect(g);
     src.start();
-    this.loops[name] = src;
+    this.loops[name] = { src, g };
+  },
+
+  /** Fade a loop out over `fadeS` seconds and release it. */
+  stopLoop(name, fadeS = 0.2) {
+    const loop = this.loops[name];
+    if (!loop) return;
+    const now = this.ctx.currentTime;
+    loop.g.gain.setTargetAtTime(0, now, fadeS / 4);
+    try { loop.src.stop(now + fadeS); } catch (e) { /* already stopped */ }
+    delete this.loops[name];
+  },
+
+  /** Duck the music (e.g. on the game-over panel). */
+  duckMusic(on) {
+    if (!this.musicBus) return;
+    this.musicBus.gain.setTargetAtTime(on ? this.VOL.musicDucked : this.VOL.music, this.ctx.currentTime, 0.1);
   },
 
   /** One-shot SFX. rate = playbackRate, delay in seconds. No-op if the file is missing. */

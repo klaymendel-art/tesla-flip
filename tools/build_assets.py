@@ -70,8 +70,40 @@ print(f"tesla_side: roof row at centre x={cx}: y={roof_center}; highest point y=
 print(f"tesla_side: wheel bottom row y={int(np.where(a.any(axis=1))[0].max())} of {side.height}")
 
 # --- Obstacles (old gas cars, facing LEFT): widths chosen so the 900-wide Roadster stays the lowest/sleekest
+def clean_bottom_rows(im, rows=8, thr=200):
+    """QA D1: no light pixels may survive under the tyres (ground-line remnants) -> clear pale pixels in the last rows"""
+    a = np.asarray(im).copy(); band = a[-rows:]
+    pale = band[..., :3].min(axis=2) >= thr
+    band[..., 3][pale] = 0; a[-rows:] = band
+    return Image.fromarray(a, "RGBA")
+
+def paint_enclosed_white(im, top_frac=0.6, min_px=1500):
+    """repaint large enclosed near-white regions in the upper body (e.g. a window the generator left white)
+    with the sprite's own glass colour (median of neutral light-grey opaque pixels)"""
+    a = np.asarray(im).copy(); h, w = a.shape[:2]
+    rgb = a[..., :3].astype(int); al = a[..., 3]
+    nw = (al > 128) & (rgb.min(axis=2) >= 225); nw[int(h * top_frac):] = False
+    glass_sel = (al == 255) & (rgb.min(axis=2) >= 150) & (rgb.min(axis=2) <= 215) & ((rgb.max(axis=2) - rgb.min(axis=2)) < 30)
+    if not nw.any() or not glass_sel.any(): return im
+    glass = np.median(rgb[glass_sel], axis=0).astype(np.uint8)
+    from collections import deque
+    seen = np.zeros_like(nw); painted = 0
+    for y0, x0 in zip(*np.nonzero(nw)):
+        if seen[y0, x0]: continue
+        q = deque([(y0, x0)]); seen[y0, x0] = True; comp = []
+        while q:
+            y, x = q.popleft(); comp.append((y, x))
+            for ny, nx in ((y-1,x),(y+1,x),(y,x-1),(y,x+1)):
+                if 0 <= ny < h and 0 <= nx < w and nw[ny, nx] and not seen[ny, nx]: seen[ny, nx] = True; q.append((ny, nx))
+        if len(comp) >= min_px:
+            for y, x in comp: a[y, x, :3] = glass
+            painted += len(comp)
+    if painted: print(f"  repainted {painted} enclosed white px with glass colour {tuple(int(v) for v in glass)}")
+    return Image.fromarray(a, "RGBA")
+
 for n, w in (("obst_muscle", 940), ("obst_pickup", 1000), ("obst_sedan", 900)):
-    im = drop_ground_line(Image.open(RAW / f"{n}_cut.png").convert("RGBA"))
+    im = clean_bottom_rows(drop_ground_line(Image.open(RAW / f"{n}_cut.png").convert("RGBA")))
+    if n == "obst_muscle": im = paint_enclosed_white(im)
     im = im.resize((w, round(im.height * w / im.width)), L)
     save(im, f"{n}.png", quant=True)
     aa = np.asarray(im)[:, :, 3] > 128

@@ -28,7 +28,28 @@ def border_flood(near_white):
                 mask[ny, nx] = True; q.append((ny, nx))
     return mask
 
-def cutout(src, tol=35, feather=1, erode=0, trim=True, global_white=False, key=None):
+def enclosed_bottom_components(near_white, bg, bottom_frac=0.25, min_px=30):
+    """second pass: near-white pixels NOT reached from the border (enclosed, e.g. under the chassis between
+    the wheels when the generator drew a ground line). Any such component whose bbox reaches into the bottom
+    `bottom_frac` of the image is background, not a highlight -> return mask of pixels to make transparent."""
+    h, w = near_white.shape
+    cand = near_white & ~bg
+    seen = np.zeros_like(cand)
+    out = np.zeros_like(cand)
+    ys, xs = np.nonzero(cand)
+    for y0, x0 in zip(ys, xs):
+        if seen[y0, x0]: continue
+        comp = []; q = deque([(y0, x0)]); seen[y0, x0] = True
+        while q:
+            y, x = q.popleft(); comp.append((y, x))
+            for ny, nx in ((y-1,x),(y+1,x),(y,x-1),(y,x+1)):
+                if 0 <= ny < h and 0 <= nx < w and cand[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True; q.append((ny, nx))
+        if len(comp) >= min_px and max(c[0] for c in comp) >= h * (1 - bottom_frac):
+            for y, x in comp: out[y, x] = True
+    return out
+
+def cutout(src, tol=35, feather=1, erode=0, trim=True, global_white=False, key=None, bottom_pass=True):
     im = Image.open(src).convert("RGB")
     a = np.asarray(im).astype(np.int16)
     if key is not None:
@@ -38,6 +59,11 @@ def cutout(src, tol=35, feather=1, erode=0, trim=True, global_white=False, key=N
         near_white = (a.min(axis=2) >= 255 - tol)
     # chroma key is global (the key colour never legitimately occurs inside the art); white uses border flood
     bg = near_white if key is not None else border_flood(near_white)
+    if bottom_pass and key is None:
+        extra = enclosed_bottom_components(near_white, bg)
+        if extra.any():
+            print(f"  bottom-pass: removed {int(extra.sum())} enclosed near-white px (rows {int(np.nonzero(extra)[0].min())}..{int(np.nonzero(extra)[0].max())})")
+            bg = bg | extra
     alpha = np.where(bg, 0, 255).astype(np.uint8)
     if global_white:
         # layers with no legit interior white (e.g. glow strips): fade ALL pale pixels by paleness
@@ -95,9 +121,10 @@ if __name__ == "__main__":
     ap.add_argument("--preview", default=None)
     ap.add_argument("--global-white", action="store_true", help="also fade pale pixels not connected to the border")
     ap.add_argument("--key", default=None, help="chroma key colour R,G,B instead of white, e.g. 255,0,255")
+    ap.add_argument("--no-bottom-pass", action="store_true", help="skip removal of enclosed near-white regions in the bottom 25%%")
     a = ap.parse_args()
     key = tuple(int(v) for v in a.key.split(",")) if a.key else None
-    res = cutout(a.src, a.tol, a.feather, a.erode, not a.no_trim, a.global_white, key)
+    res = cutout(a.src, a.tol, a.feather, a.erode, not a.no_trim, a.global_white, key, not a.no_bottom_pass)
     res.save(a.out, optimize=True)
     print(a.out, res.size)
     if a.preview:

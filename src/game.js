@@ -15,36 +15,47 @@ const CFG = {
   FIXED_DT: 1 / 120,            // physics step, s
   MAX_FRAME_DT: 0.1,            // clamp after tab switches
   SCROLL_SPEED: 3.0,            // road speed, carW per second (base)
-  SPEED_RAMP: 0.03,             // +3 % per 10 points …
-  SPEED_CAP: 1.8,               // … capped at 1.8×
-  PARALLAX: { bg_far: 0.15, bg_mid: 0.4, bg_near: 0.8 },
+  SPEED_RAMP: 0.04, SPEED_STEP: 5, SPEED_CAP: 1.6,   // +4 % every 5 points, capped at 1.6×
+  PARALLAX: { bg_far: 0.15, bg_mid: 0.4, bg_near: 0.8, clouds: 0.05 },
   LAYER_REF_H: 1920,            // bg layers are authored for a 1920 px-tall portrait frame
-  NEAR_LAYER_SCALE: 0.6,        // bg_near is busy; artist suggests ≤ 60 %
-  CAR_W_FRAC: { portrait: 0.27, landscape: 0.2 },  // carW vs screen width
+  NEAR_FIT: [0.9, 1.6],         // bg_near is stretched to fill horizon→kerb, within these × of layer scale
+  LAYOUT: {                     // fractions of screen height / width
+    portrait: { horizon: 0.66, ground: 0.80, carWFrac: 0.27, playerX: 0.24 },
+    landscape: { horizon: 0.62, ground: 0.82, carWFrac: 0.20, playerX: 0.28 },
+    curb: 0.025, dash: 0.38, farLift: 0.07,       // kerb height, dash row inside the road, bg_far raised above horizon
+    sun: { x: 0.72, up: 0.16, r: 0.07 },          // r × min(W,H); up × H above the horizon
+    hudTop: 0.10, stars: 48, clouds: 3,
+  },
   STACK_FIT: 2.8,               // car + rider + double-flip apex, in carW (keeps it on screen)
   MUSK_H: 0.95,                 // rider height in carW
   MUSK_FOOT_X: 430 / 900,       // feet centre along the car (artist pivot)
   MUSK_SINK: 6 / 900,           // soles sink into the roof, in carW
-  PLAYER_X: { portrait: 0.24, landscape: 0.28 },
-  // Flips. peak = rider apex, carPeak = Roadster apex (both in carW). The car lags takeoff by carDelay.
-  FLIP:   { dur: 1.0,  turns: 1, peak: 0.95, carPeak: 0.85, carDelay: 0.04 },
-  DOUBLE: { dur: 1.45, turns: 2, peak: 1.15, carPeak: 1.05 },
+  // Flips. peak = rider apex, carPeak = Roadster apex (in carW). The car lags takeoff by carDelay.
+  FLIP:   { dur: 1.0, turns: 1, peak: 0.98, carPeak: 0.90, carDelay: 0.03 },
+  DOUBLE: { dur: 1.35, turns: 2, peak: 1.13, carPeak: 1.05 },  // shorter hang than before: the double is a commitment
   DOUBLE_TAP_MS: 200,
+  QUEUE_WINDOW_S: 0.15,         // a mid-air tap only queues a flip this close to landing
   SPIN_FRAC: 0.94,              // rotation completes at this fraction of the flight
   TILT_Z: 12 * Math.PI / 180,
   LEAN: 9 * Math.PI / 180,
   SQUASH: { ms: 80, x: 1.12, y: 0.9 },
   SHAKE: { px: 2, ms: 130 },
   BOB: { hz: 2.1, px: 2.5 },
-  // Obstacles
+  // Obstacles. Hitboxes are 1–3 boxes per kind (hood / cab / bed), as fractions of the sprite
+  // (x from the nose, top = height from the ground), already shrunk ≈6 %/side; the right 10 % is
+  // left out because the exhaust puff is baked into the sprites.
   OBST_KINDS: ['obst_muscle', 'obst_pickup', 'obst_sedan'],
-  OBST_SHRINK: { side: 0.06, right: 0.10, top: 0.06 },  // hitbox inset, fraction of sprite
-  PLAYER_SHRINK: 0.15,
+  HITBOX: {
+    obst_muscle: [{ x1: 0.06, x2: 0.35, top: 0.70 }, { x1: 0.35, x2: 0.75, top: 0.94 }, { x1: 0.75, x2: 0.90, top: 0.70 }],
+    obst_pickup: [{ x1: 0.06, x2: 0.25, top: 0.64 }, { x1: 0.25, x2: 0.55, top: 0.94 }, { x1: 0.55, x2: 0.90, top: 0.74 }],
+    obst_sedan:  [{ x1: 0.06, x2: 0.30, top: 0.60 }, { x1: 0.30, x2: 0.75, top: 0.94 }, { x1: 0.75, x2: 0.90, top: 0.64 }],
+  },
+  PLAYER_SHRINK: 0.15, PLAYER_LENIENCY: 0.08,  // AABB inset; leniency lifts the player's bottom (in carW)
   GAP_SLACK: 0.35,              // s added to the flip duration for the minimum gap
-  GAP_RAND: 1.3,                // max extra gap, as a multiple of the minimum
-  PAIR_CHANCE: 0.22, PAIR_MIN_SCORE: 4, PAIR_GAP: [0.3, 0.55],  // pairs (in carW) need the double flip
+  GAP_RAND: [1.3, 0.4], GAP_RAND_SCORE: 40,   // max extra gap (× min gap) shrinks from [0] to [1] by this score
+  PAIR_CHANCE: [0.2, 0.4], PAIR_CHANCE_SCORE: 60, PAIR_MIN_SCORE: 4, PAIR_GAP: [0.3, 0.45],  // pairs (gap in carW) need the double; chance ramps with score
   FIRST_SPAWN_S: 1.6,
-  PUFF_EVERY: [0.7, 1.8],
+  PUFF_EVERY: [0.7, 1.8], PUFF_AT: { x: 0.93, y: 0.12 },
   CRASH_S: 0.8,
   POOL: { particles: 96, lines: 12, pops: 4, obstacles: 6 },
   KEY_BEST: 'teslaflip.best',
@@ -66,6 +77,12 @@ const PLACEHOLDER_COLOR = {
   musk_ride: '#5aa0e6', musk_air: '#7cc1ff', tesla_side: '#e9e9e4', tesla_bottom: '#3a3a48',
   bg_far: '#6b5fa8', bg_mid: '#4e4178', bg_near: '#7a7490',
   obst_muscle: '#f08a2a', obst_pickup: '#6e7d55', obst_sedan: '#b0966e',
+};
+const COLORS = {
+  ink: '#1b1430', red: '#e82127', gold: '#ffe27a', lilac: '#e8e0ff',
+  sky: ['#241a4d', '#6a3a8c', '#d9603f', '#ffb46a'], sun: '#ffd27a', sunGlow: '#ffe0a0',
+  bandTop: '#4a4668', bandBottom: '#58577e',   // bandBottom = bg_near pavement colour
+  road: '#2f2d3a', curb: '#8f889f', dash: 'rgba(231,217,160,0.8)', dust: '#cdbfaa', smoke: '#2b2733',
 };
 const FONT_FAMILY = '"Arial Rounded MT Bold", "Trebuchet MS", "Segoe UI", system-ui, sans-serif';
 const TAU = Math.PI * 2;
@@ -98,12 +115,17 @@ const L = {    // everything derived from the viewport; rebuilt on resize
   W: 1, H: 1, dpr: 1, portrait: true, safe: { t: 0, r: 0, b: 0, l: 0 },
   horizonY: 0, groundY: 0, roadTop: 0, dashY: 0, playerX: 0,
   carW: 100, carH: 32, px: 0.1, muskS: 0.1, muskFootX: 0,
-  layerS: 1, btn: { x: 0, y: 0, r: 40 }, mute: { x: 0, y: 0, s: 44 },
-  font: {}, sky: null, band: null, sun: { x: 0, y: 0, r: 0 },
+  layerS: 1, btn: { x: 0, y: 0, r: 40 }, showBtn: true, mute: { x: 0, y: 0, s: 44 },
+  fonts: {}, sky: null, band: null, sun: { x: 0, y: 0, r: 0 },
+  stars: [], clouds: [],
 };
+for (let i = 0; i < CFG.LAYOUT.stars; i++) L.stars.push({ x: 0, y: 0, r: 1, a: 0.5 });
+for (let i = 0; i < CFG.LAYOUT.clouds; i++) L.clouds.push({ x: 0, y: 0, w: 0, h: 0 });
 const SPR = {};   // name → { cv, w, h } pre-scaled to device pixels; w/h in CSS px
 
 function readSafeInset(cs, v) { return parseFloat(cs.getPropertyValue(v)) || 0; }
+/** Small deterministic PRNG so stars/clouds don't reshuffle on every resize. */
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 
 function layout() {
   const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
@@ -111,18 +133,18 @@ function layout() {
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   L.W = W; L.H = H; L.dpr = dpr; L.portrait = H >= W;
-  const mode = L.portrait ? 'portrait' : 'landscape';
+  const LY = CFG.LAYOUT, mode = LY[L.portrait ? 'portrait' : 'landscape'];
   const cs = getComputedStyle(document.documentElement);
   L.safe = { t: readSafeInset(cs, '--sat'), r: readSafeInset(cs, '--sar'), b: readSafeInset(cs, '--sab'), l: readSafeInset(cs, '--sal') };
 
-  L.horizonY = Math.round(H * (L.portrait ? 0.62 : 0.60));
-  L.groundY = Math.round(H * (L.portrait ? 0.78 : 0.82));
-  L.roadTop = L.groundY - Math.round(H * 0.025);
-  L.dashY = L.groundY + (H - L.groundY) * 0.38;
-  L.playerX = Math.round(W * CFG.PLAYER_X[mode]);
+  L.horizonY = Math.round(H * mode.horizon);
+  L.groundY = Math.round(H * mode.ground);
+  L.roadTop = L.groundY - Math.round(H * LY.curb);
+  L.dashY = L.groundY + (H - L.groundY) * LY.dash;
+  L.playerX = Math.round(W * mode.playerX);
 
-  const topSafe = L.safe.t + H * 0.1;
-  L.carW = Math.min(W * CFG.CAR_W_FRAC[mode], (L.groundY - topSafe) / CFG.STACK_FIT);
+  const topSafe = L.safe.t + H * LY.hudTop;
+  L.carW = Math.min(W * mode.carWFrac, (L.groundY - topSafe) / CFG.STACK_FIT);
   const [cw0, ch0] = natSize('tesla_side');
   L.px = L.carW / cw0;                       // world pixel scale: 900 sprite px ≈ one car length
   L.carH = ch0 * L.px;
@@ -133,21 +155,30 @@ function layout() {
 
   const m = Math.min(W, H);
   L.btn.r = clamp(m * 0.11, 34, 60);
-  L.btn.x = W / 2; L.btn.y = H - L.safe.b - L.btn.r - m * 0.04;
+  L.btn.y = H - L.safe.b - L.btn.r - m * 0.04;
+  L.btn.x = W / 2;
+  L.showBtn = L.portrait;   // landscape has no room below the lane (cars would pass behind it): tap anywhere / keys
   L.mute.s = 44; L.mute.x = W - L.safe.r - 12 - 44; L.mute.y = L.safe.t + 12;
-  L.sun.x = W * 0.72; L.sun.y = L.horizonY - H * 0.05; L.sun.r = m * 0.07;
+  L.sun.x = W * LY.sun.x; L.sun.y = L.horizonY - H * LY.sun.up; L.sun.r = m * LY.sun.r;
 
-  const f = L.font;
-  f.hud = clamp(m * 0.13, 28, 72); f.best = f.hud * 0.38;
-  f.title = clamp(m * 0.17, 36, 110); f.tap = clamp(m * 0.07, 18, 44); f.hint = clamp(m * 0.032, 11, 20);
-  f.btn = L.btn.r * 0.5; f.pop = clamp(m * 0.08, 20, 44); f.panel = clamp(m * 0.11, 26, 64); f.panelS = f.panel * 0.45;
+  const rnd = seeded(7);
+  for (const s of L.stars) { s.x = rnd() * W; s.y = rnd() * L.sun.y * 0.9; s.r = 0.7 + rnd() * 1.1; s.a = 0.25 + rnd() * 0.55; }
+  for (const c of L.clouds) { c.x = rnd() * W; c.y = L.horizonY * (0.35 + rnd() * 0.3); c.w = m * (0.18 + rnd() * 0.14); c.h = c.w * 0.3; }
+
+  const fs = (key, size) => { L.fonts[key] = { str: '900 ' + size + 'px ' + FONT_FAMILY, size }; return size; };
+  const hud = fs('hud', clamp(m * 0.13, 28, 72));
+  fs('best', hud * 0.38);
+  const title = fs('title', clamp(m * 0.17, 36, 110));
+  fs('tap', clamp(m * 0.07, 18, 44)); fs('hint', clamp(m * 0.032, 11, 20));
+  fs('btn', L.btn.r * 0.5); fs('pop', clamp(m * 0.08, 20, 44));
+  const panel = clamp(m * 0.11, 26, 64);
+  fs('panel', panel * 0.8); fs('panelS', panel * 0.45); fs('panelTap', panel * 0.52);
+  L.panelUnit = panel; L.titleSize = title;
 
   L.sky = ctx.createLinearGradient(0, 0, 0, L.horizonY);
-  L.sky.addColorStop(0, '#241a4d'); L.sky.addColorStop(0.45, '#6a3a8c');
-  L.sky.addColorStop(0.8, '#d9603f'); L.sky.addColorStop(1, '#ffb46a');
-
-  L.band = ctx.createLinearGradient(0, L.horizonY, 0, L.roadTop);   // far plaza: dark at the buildings, lighter near the curb
-  L.band.addColorStop(0, '#45405e'); L.band.addColorStop(1, '#6e6886');
+  COLORS.sky.forEach((c, i) => L.sky.addColorStop([0, 0.45, 0.8, 1][i], c));
+  L.band = ctx.createLinearGradient(0, L.horizonY, 0, L.roadTop);   // far plaza, blends into the bg_near pavement
+  L.band.addColorStop(0, COLORS.bandTop); L.band.addColorStop(1, COLORS.bandBottom);
 
   buildSprites();
   for (const o of G.obstacles) if (o.alive) sizeObstacle(o);
@@ -157,11 +188,12 @@ function buildSprites() {
   const s = L.px;
   for (const n of ['musk_ride', 'musk_air']) { const [w, h] = natSize(n); sprite(n, w * L.muskS, h * L.muskS); }
   for (const n of ['tesla_side', 'tesla_bottom', ...CFG.OBST_KINDS]) { const [w, h] = natSize(n); sprite(n, w * s, h * s); }
-  for (const n of ['bg_far', 'bg_mid', 'bg_near']) {
-    const [w, h] = natSize(n);
-    const k = L.layerS * (n === 'bg_near' ? CFG.NEAR_LAYER_SCALE : 1);
-    sprite(n, w * k, h * k);
-  }
+  for (const n of ['bg_far', 'bg_mid']) { const [w, h] = natSize(n); sprite(n, w * L.layerS, h * L.layerS); }
+  // bg_near is the kerb: stretch it (within limits) so it exactly fills horizon → kerb and no flat band shows.
+  const [nw, nh] = natSize('bg_near');
+  const want = (L.roadTop - 2 - L.horizonY) / nh;
+  const k = clamp(want, L.layerS * CFG.NEAR_FIT[0], L.layerS * CFG.NEAR_FIT[1]);
+  sprite('bg_near', nw * k, nh * k);
 }
 
 /** (Re)build one pre-scaled sprite canvas; reuses the canvas element across resizes. */
@@ -182,8 +214,8 @@ function sprite(name, w, h) {
     c.fillStyle = 'rgba(25,22,40,0.7)'; c.fillRect(0, 0, pw, ph);
   } else {
     c.fillStyle = PLACEHOLDER_COLOR[name] || '#888'; c.fillRect(0, 0, pw, ph);
-    c.lineWidth = Math.max(2, 4 * L.dpr); c.strokeStyle = '#1b1430'; c.strokeRect(0, 0, pw, ph);
-    c.fillStyle = '#1b1430'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.lineWidth = Math.max(2, 4 * L.dpr); c.strokeStyle = COLORS.ink; c.strokeRect(0, 0, pw, ph);
+    c.fillStyle = COLORS.ink; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.font = 'bold ' + Math.max(10, Math.min(ph * 0.3, pw * 0.09)) + 'px ' + FONT_FAMILY;
     c.fillText(name, pw / 2, ph / 2);
   }
@@ -201,14 +233,15 @@ const G = {
   queued: false,
   squashT: 0, shakeT: 0, btnT: 0,  // ms timers
   dustTimer: 0,
-  spawnDist: 0, nextKind: 'obst_sedan', pairPending: false, afterPair: false,
+  spawnDist: 0, nextKind: 'obst_sedan', nextPair: false,
   crash: { t: 0, mx: 0, my: 0, mvx: 0, mvy: 0, ma: 0, mav: 0, cx: 0, cy: 0, cvx: 0, cvy: 0, ca: 0, cav: 0 },
   particles: [], lines: [], pops: [], obstacles: [],
+  paused: false,                 // QA hook: freezes the rAF physics so TF.step() can drive it
 };
 for (let i = 0; i < CFG.POOL.particles; i++) G.particles.push({ life: 0, max: 1, x: 0, y: 0, vx: 0, vy: 0, r: 1, smoke: false });
 for (let i = 0; i < CFG.POOL.lines; i++) G.lines.push({ x: 0, y: 0, len: 0, spd: 1, a: 0.2 });
 for (let i = 0; i < CFG.POOL.pops; i++) G.pops.push({ alive: false, x: 0, y: 0, t: 0, text: '' });
-for (let i = 0; i < CFG.POOL.obstacles; i++) G.obstacles.push({ alive: false, kind: 'obst_sedan', x: 0, w: 0, h: 0, hx1: 0, hx2: 0, htop: 0, scored: false, puffT: 0 });
+for (let i = 0; i < CFG.POOL.obstacles; i++) G.obstacles.push({ alive: false, kind: 'obst_sedan', x: 0, w: 0, h: 0, scored: false, puffT: 0 });
 
 try { G.best = parseInt(localStorage.getItem(CFG.KEY_BEST), 10) || 0; } catch (e) { /* storage blocked */ }
 G.bestStr = 'BEST ' + G.best;
@@ -259,72 +292,71 @@ function tryFlip() {
   const f = G.flip;
   if (!f.active) { startFlip(CFG.FLIP); return; }
   if (f.turns === 1 && f.t * 1000 <= CFG.DOUBLE_TAP_MS) upgradeToDouble();
-  else G.queued = true;   // at most one queued flip, fired after the landing squash
+  else if (f.dur - f.t <= CFG.QUEUE_WINDOW_S) G.queued = true;   // late tap: one flip right after landing
 }
 
 /* Obstacles --------------------------------------------------------------- */
-function sizeObstacle(o) {
-  const sp = SPR[o.kind];
-  o.w = sp.w; o.h = sp.h;
-}
-function obstacleHitbox(o) {
-  const S = CFG.OBST_SHRINK;
-  o.hx1 = o.x + o.w * S.side; o.hx2 = o.x + o.w * (1 - S.right);
-  o.htop = L.groundY - o.h * (1 - S.top);
-}
+function sizeObstacle(o) { const sp = SPR[o.kind]; o.w = sp.w; o.h = sp.h; }
 function spawnObstacle(kind, x) {
   for (const o of G.obstacles) {
     if (o.alive) continue;
     o.alive = true; o.kind = kind; sizeObstacle(o);
     o.x = x === undefined ? L.W + L.carW * 0.15 : x;
     o.scored = false; o.puffT = rand(CFG.PUFF_EVERY[0], CFG.PUFF_EVERY[1]);
-    obstacleHitbox(o);
     return o;
   }
   return null;
 }
 function lowKind() { return Math.random() < 0.5 ? 'obst_muscle' : 'obst_sedan'; }
 
-/** Picks the next spawn: pairs (two low cars, gap < 0.6 car) force the double flip. */
-function scheduleNextSpawn(lastWidth) {
-  const v = CFG.SCROLL_SPEED * L.carW * G.speedMul;
-  if (G.pairPending) {           // partner of a pair: tiny gap, low car only
-    G.pairPending = false; G.afterPair = true;
-    G.nextKind = lowKind();
-    G.spawnDist = lastWidth + rand(CFG.PAIR_GAP[0], CFG.PAIR_GAP[1]) * L.carW;
-    return;
+/** Spawns the next obstacle — or a close pair (both cars at once, so the pair is readable the
+ *  moment it enters the screen; it needs the double flip) — and schedules the one after it. */
+function spawnNext() {
+  const first = spawnObstacle(G.nextKind);
+  if (!first) return;
+  let span = first.w, wasPair = false;
+  if (G.nextPair) {
+    const partner = spawnObstacle(lowKind(), first.x + first.w + rand(CFG.PAIR_GAP[0], CFG.PAIR_GAP[1]) * L.carW);
+    if (partner) { span = partner.x + partner.w - first.x; wasPair = true; }
   }
-  const flipDur = G.afterPair ? CFG.DOUBLE.dur : CFG.FLIP.dur;   // recovering from a double takes longer
-  G.afterPair = false;
+  const v = CFG.SCROLL_SPEED * L.carW * G.speedMul;
+  const flipDur = wasPair ? CFG.DOUBLE.dur : CFG.FLIP.dur;     // recovering from a double takes longer
   const minGap = v * (flipDur + CFG.GAP_SLACK);
-  G.spawnDist = lastWidth + minGap * (1 + Math.random() * CFG.GAP_RAND);
-  const pair = G.score >= CFG.PAIR_MIN_SCORE && Math.random() < CFG.PAIR_CHANCE;
-  G.pairPending = pair;
-  G.nextKind = pair ? lowKind() : CFG.OBST_KINDS[(Math.random() * CFG.OBST_KINDS.length) | 0];
+  const k = Math.min(1, G.score / CFG.GAP_RAND_SCORE);          // gaps tighten as the score climbs
+  const gapRand = CFG.GAP_RAND[0] + (CFG.GAP_RAND[1] - CFG.GAP_RAND[0]) * k;
+  G.spawnDist = span + minGap * (1 + Math.random() * gapRand);
+  const pairChance = CFG.PAIR_CHANCE[0] + (CFG.PAIR_CHANCE[1] - CFG.PAIR_CHANCE[0]) * Math.min(1, G.score / CFG.PAIR_CHANCE_SCORE);
+  G.nextPair = G.score >= CFG.PAIR_MIN_SCORE && Math.random() < pairChance;
+  G.nextKind = G.nextPair ? lowKind() : CFG.OBST_KINDS[(Math.random() * CFG.OBST_KINDS.length) | 0];
+}
+
+/** Player hitbox bottom (screen y). Follows the Roadster; mid-flip the car is edge-on, so its
+ *  real underside sits higher — credit that so visible clears are clears. */
+function playerBottom() {
+  const f = G.flip;
+  const edgeOn = f.active ? (1 - Math.abs(Math.cos(f.theta))) * L.carH * 0.5 : 0;
+  return L.groundY - f.cy - edgeOn - L.carW * CFG.PLAYER_LENIENCY;
 }
 
 function updateObstacles(dt) {
   const v = roadSpeed();
   if (G.state === 'play') {
     G.spawnDist -= v * dt;
-    if (G.spawnDist <= 0) { const o = spawnObstacle(G.nextKind); scheduleNextSpawn(o ? o.w : L.carW); }
+    if (G.spawnDist <= 0) spawnNext();
   }
-  // Player hitbox (Musk + car, shrunk 15 %). Bottom follows the Roadster; mid-flip the car is
-  // edge-on, so its real underside sits higher — credit that so visible clears are clears.
-  const f = G.flip, cw = L.carW;
-  const px1 = L.playerX - cw * 0.5 * (1 - CFG.PLAYER_SHRINK), px2 = L.playerX + cw * 0.5 * (1 - CFG.PLAYER_SHRINK);
-  const edgeOn = f.active ? (1 - Math.abs(Math.cos(f.theta))) * L.carH * 0.5 : 0;
-  const pBottom = L.groundY - f.cy - edgeOn - cw * 0.08;
+  const cw = L.carW, half = cw * 0.5 * (1 - CFG.PLAYER_SHRINK);
+  const px1 = L.playerX - half, px2 = L.playerX + half, pBottom = playerBottom();
   for (const o of G.obstacles) {
     if (!o.alive) continue;
     o.x -= v * dt;
-    obstacleHitbox(o);
     if (o.x + o.w < -cw) { o.alive = false; continue; }
     o.puffT -= dt;
-    if (o.puffT <= 0) { o.puffT = rand(CFG.PUFF_EVERY[0], CFG.PUFF_EVERY[1]); spawnSmoke(o.x + o.w * 0.93, L.groundY - o.h * 0.12); }
+    if (o.puffT <= 0) { o.puffT = rand(CFG.PUFF_EVERY[0], CFG.PUFF_EVERY[1]); spawnSmoke(o.x + o.w * CFG.PUFF_AT.x, L.groundY - o.h * CFG.PUFF_AT.y); }
     if (G.state !== 'play') continue;
     if (!o.scored && o.x + o.w < L.playerX) { o.scored = true; addScore(); }
-    if (o.hx1 < px2 && o.hx2 > px1 && pBottom > o.htop) startCrash();
+    for (const b of CFG.HITBOX[o.kind]) {
+      if (o.x + o.w * b.x1 < px2 && o.x + o.w * b.x2 > px1 && pBottom > L.groundY - o.h * b.top) { startCrash(); break; }
+    }
   }
 }
 
@@ -334,7 +366,7 @@ function addScore() {
     G.best = G.score; G.bestStr = 'BEST ' + G.best; G.newBest = true;
     try { localStorage.setItem(CFG.KEY_BEST, String(G.best)); } catch (e) { /* ignore */ }
   }
-  G.speedMul = Math.min(CFG.SPEED_CAP, 1 + CFG.SPEED_RAMP * Math.floor(G.score / 10));
+  G.speedMul = Math.min(CFG.SPEED_CAP, 1 + CFG.SPEED_RAMP * Math.floor(G.score / CFG.SPEED_STEP));
   spawnPop('+1');
   Snd.play('score');
 }
@@ -351,6 +383,8 @@ function startCrash() {
   G.shakeT = CFG.SHAKE.ms * 2.5;
   spawnDust(L.playerX, L.groundY - L.carH, 16, 2);
   Snd.play('crash');
+  Snd.stopLoop('roll', 0.25);
+  Snd.duckMusic(true);
 }
 
 function updateCrash(dt) {
@@ -372,7 +406,9 @@ function resetRun() {
   for (const o of G.obstacles) o.alive = false;
   for (const p of G.particles) p.life = 0;
   G.spawnDist = CFG.SCROLL_SPEED * L.carW * CFG.FIRST_SPAWN_S;
-  G.pairPending = false; G.afterPair = false; G.nextKind = lowKind();
+  G.nextPair = false; G.nextKind = lowKind();
+  Snd.startLoop('roll');
+  Snd.duckMusic(false);
 }
 
 /* Particles ---------------------------------------------------------------- */
@@ -408,10 +444,13 @@ function spawnPop(text) {
     return;
   }
 }
+/** Speed lines: a few slow ones in the sky (far plane), faster ones on the asphalt (near plane). */
 function resetLine(ln, offscreen) {
   ln.x = offscreen ? L.W + rand(0, L.W) : rand(0, L.W);
-  ln.y = Math.random() < 0.6 ? rand(L.H * 0.04, L.horizonY * 0.9) : rand(L.groundY + 6, L.H - 6);
-  ln.len = rand(0.3, 0.9) * L.carW; ln.spd = rand(1.3, 2.0); ln.a = rand(0.08, 0.2);
+  const sky = Math.random() < 0.5;
+  ln.y = sky ? rand(L.H * 0.04, L.horizonY * 0.9) : rand(L.groundY + 6, L.H - 6);
+  ln.spd = sky ? 0.25 : rand(1.3, 1.7);
+  ln.len = rand(0.3, 0.9) * L.carW; ln.a = sky ? rand(0.06, 0.12) : rand(0.1, 0.2);
 }
 
 /* ───────────────────────────── 6. Update ───────────────────────────── */
@@ -460,7 +499,6 @@ function update(dt) {
 }
 
 /* ───────────────────────────── 7. Render ───────────────────────────── */
-
 function render() {
   const W = L.W, H = L.H;
   ctx.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
@@ -470,20 +508,13 @@ function render() {
     const k = CFG.SHAKE.px * Math.min(1, G.shakeT / CFG.SHAKE.ms);
     ctx.translate((Math.random() * 2 - 1) * k, (Math.random() * 2 - 1) * k);
   }
-  // sky + sun
-  ctx.fillStyle = L.sky; ctx.fillRect(0, 0, W, L.horizonY + 2);
-  ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffe0a0';
-  ctx.beginPath(); ctx.arc(L.sun.x, L.sun.y, L.sun.r * 1.7, 0, TAU); ctx.fill();
-  ctx.globalAlpha = 1; ctx.fillStyle = '#ffd27a';
-  ctx.beginPath(); ctx.arc(L.sun.x, L.sun.y, L.sun.r, 0, TAU); ctx.fill();
-
-  drawLayer('bg_far', L.horizonY);
-  drawLayer('bg_mid', L.horizonY + H * 0.012);
-  // sidewalk band + road
+  drawSky();
+  drawLayer('bg_far', L.horizonY - H * CFG.LAYOUT.farLift);   // raised so its roofline shows above bg_mid
+  drawLayer('bg_mid', L.horizonY);
   ctx.fillStyle = L.band; ctx.fillRect(0, L.horizonY, W, L.roadTop - L.horizonY);
-  drawLayer('bg_near', L.roadTop);
-  ctx.fillStyle = '#2f2d3a'; ctx.fillRect(0, L.roadTop, W, H - L.roadTop);
-  ctx.fillStyle = '#8f889f'; ctx.fillRect(0, L.roadTop, W, 3);
+  drawLayer('bg_near', L.roadTop - 2);
+  ctx.fillStyle = COLORS.road; ctx.fillRect(0, L.roadTop, W, H - L.roadTop);
+  ctx.fillStyle = COLORS.curb; ctx.fillRect(0, L.roadTop, W, 3);
   drawDashes();
   drawSpeedLines();
 
@@ -502,23 +533,45 @@ function render() {
 
 function drawBoot() {
   const W = L.W, H = L.H;
-  ctx.fillStyle = '#241a4d'; ctx.fillRect(0, 0, W, H);
-  drawText('TESLA FLIP', W / 2, H * 0.42, L.font.tap, '#fff');
-  const bw = Math.min(W * 0.6, 320), bh = 10, bx = (W - bw) / 2, by = H * 0.42 + L.font.tap * 1.8;
+  ctx.fillStyle = COLORS.sky[0]; ctx.fillRect(0, 0, W, H);
+  drawText('TESLA FLIP', W / 2, H * 0.42, 'tap', '#fff');
+  const bw = Math.min(W * 0.6, 320), bh = 10, bx = (W - bw) / 2, by = H * 0.42 + L.fonts.tap.size * 1.8;
   ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = '#e82127'; ctx.fillRect(bx, by, bw * G.progress, bh);
+  ctx.fillStyle = COLORS.red; ctx.fillRect(bx, by, bw * G.progress, bh);
+}
+
+function drawSky() {
+  const W = L.W;
+  ctx.fillStyle = L.sky; ctx.fillRect(0, 0, W, L.horizonY + 2);
+  ctx.fillStyle = '#fff';
+  for (const s of L.stars) { ctx.globalAlpha = s.a; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); }
+  ctx.globalAlpha = 0.25; ctx.fillStyle = COLORS.sunGlow;
+  ctx.beginPath(); ctx.arc(L.sun.x, L.sun.y, L.sun.r * 1.7, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = COLORS.sun;
+  ctx.beginPath(); ctx.arc(L.sun.x, L.sun.y, L.sun.r, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 0.14; ctx.fillStyle = '#ffd9c0';
+  const drift = G.scroll * CFG.PARALLAX.clouds;
+  for (const c of L.clouds) {
+    const x = ((c.x - drift) % (W + c.w * 2) + W + c.w * 2) % (W + c.w * 2) - c.w;   // wraps across the width
+    ctx.beginPath();
+    ctx.ellipse(x, c.y, c.w * 0.5, c.h * 0.5, 0, 0, TAU);
+    ctx.ellipse(x - c.w * 0.3, c.y + c.h * 0.15, c.w * 0.3, c.h * 0.4, 0, 0, TAU);
+    ctx.ellipse(x + c.w * 0.3, c.y + c.h * 0.12, c.w * 0.32, c.h * 0.42, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawLayer(name, bottomY) {
   const sp = SPR[name], f = CFG.PARALLAX[name];
-  const y = bottomY - sp.h;
+  const y = Math.round(bottomY - sp.h);
   let x = -((G.scroll * f) % sp.w);
-  for (; x < L.W; x += sp.w) ctx.drawImage(sp.cv, Math.round(x), Math.round(y), sp.w + 1, sp.h);  // +1 hides seams
+  for (; x < L.W; x += sp.w) ctx.drawImage(sp.cv, Math.round(x), y, sp.w + 1, sp.h);  // +1 hides seams
 }
 
 function drawDashes() {
   const dash = L.carW * 0.35, gap = L.carW * 0.3, period = dash + gap, h = Math.max(2, L.H * 0.008);
-  ctx.fillStyle = 'rgba(231,217,160,0.8)';
+  ctx.fillStyle = COLORS.dash;
   for (let x = -(G.scroll % period); x < L.W; x += period) ctx.fillRect(x, L.dashY, dash, h);
 }
 
@@ -537,25 +590,47 @@ function drawShadow() {
   ctx.globalAlpha = 1;
 }
 
-function idleBob() { return Math.sin(G.time * TAU * CFG.BOB.hz) * CFG.BOB.px; }
+function idleBob() { return Math.sin(G.time * TAU * CFG.BOB.hz) * CFG.BOB.px * 0.5; }
+
+/** Solid-body kickflip: the car is a box (height carH, depth = belly sprite height) rotating about
+ *  its long axis, seen from the side. Each visible face is drawn with its projected height and
+ *  offset, back to front: near side → belly → far side (upside-down) → roof → near side. */
+function drawCarFaces(theta) {
+  const side = SPR.tesla_side, belly = SPR.tesla_bottom, cw = L.carW;
+  const Hh = L.carH * 0.5, Dh = belly.h * 0.5;
+  const s = Math.sin(theta), c = Math.cos(theta);
+  // face: [depth toward the viewer, screen-y of centre, projected half-height, sprite, flipY, crop]
+  // The roof has no sprite of its own: use the body/canopy band of the side view (top 45 %, no wheels).
+  const near = [Dh * c, -Dh * s, Hh * c, side, 1, 1];
+  const bottom = [Hh * s, Hh * c, Dh * s, belly, -1, 1];
+  const far = [-Dh * c, Dh * s, -Hh * c, side, -1, 1];
+  const top = [-Hh * s, -Hh * c, -Dh * s, side, -1, 0.45];
+  const faces = [near, bottom, far, top];
+  for (let pass = 0; pass < 2; pass++) {              // two visible faces at most; draw the deeper one first
+    let best = null;
+    for (const fc of faces) if (fc[0] > 0 && fc[2] > 0.5 && (!best || fc[0] < best[0])) best = fc;
+    if (!best) break;
+    best[0] = -1;                                       // consumed
+    const sp = best[3], crop = best[5];
+    ctx.save();
+    ctx.translate(0, best[1]);
+    ctx.scale(1, best[4] * best[2] / (sp.h * 0.5));
+    ctx.drawImage(sp.cv, 0, 0, sp.cv.width, sp.cv.height * crop, -cw / 2, -sp.h / 2, sp.w, sp.h);
+    ctx.restore();
+  }
+}
 
 function drawCar() {
   const f = G.flip, cw = L.carW, ch = L.carH;
   ctx.save();
   if (f.active) {
-    const u = f.t / f.dur, cosT = Math.cos(f.theta);
+    const u = f.t / f.dur;
     ctx.translate(L.playerX, L.groundY - ch / 2 - f.cy);
     ctx.rotate(-CFG.TILT_Z * Math.sin(TAU * u));              // nose up on takeoff, down on landing
-    if (Math.abs(cosT) < 0.04) {                               // edge-on: keep a sliver visible
-      ctx.fillStyle = '#2a2838'; ctx.fillRect(-cw / 2, -2, cw, 4);
-    } else if (cosT < 0) {                                     // belly view, mirrored by the negative scale
-      const sp = SPR.tesla_bottom; ctx.scale(1, cosT); ctx.drawImage(sp.cv, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
-    } else {
-      ctx.scale(1, cosT); ctx.drawImage(SPR.tesla_side.cv, -cw / 2, -ch / 2, cw, ch);
-    }
+    drawCarFaces(f.theta);
   } else {
     const k = squashK();
-    ctx.translate(L.playerX, L.groundY + idleBob() * 0.5);
+    ctx.translate(L.playerX, L.groundY + idleBob());
     ctx.scale(1 + (CFG.SQUASH.x - 1) * k, 1 - (1 - CFG.SQUASH.y) * k);
     ctx.drawImage(SPR.tesla_side.cv, -cw / 2, -ch, cw, ch);
   }
@@ -572,7 +647,7 @@ function drawMusk() {
     if (u > 0.1 && u < 0.88) frame = SPR.musk_air;
   } else {
     const k = squashK();
-    feetY = L.groundY - L.carH * (1 - (1 - CFG.SQUASH.y) * k) + idleBob() * 0.5;
+    feetY = L.groundY - L.carH * (1 - (1 - CFG.SQUASH.y) * k) + idleBob();
     sy = 1 - 0.06 * k;
   }
   ctx.save();
@@ -593,7 +668,7 @@ function drawParticles() {
     if (p.life <= 0) continue;
     const k = p.life / p.max;
     ctx.globalAlpha = (p.smoke ? 0.45 : 0.7) * k;
-    ctx.fillStyle = p.smoke ? '#2b2733' : '#cdbfaa';
+    ctx.fillStyle = p.smoke ? COLORS.smoke : COLORS.dust;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (p.smoke ? 1 : 1.6 - 0.6 * k), 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -603,23 +678,25 @@ function drawPops() {
   for (const p of G.pops) {
     if (!p.alive) continue;
     ctx.globalAlpha = p.t < 0.5 ? 1 : 1 - (p.t - 0.5) / 0.3;
-    drawText(p.text, p.x, p.y, L.font.pop, '#ffe27a');
+    drawText(p.text, p.x, p.y, 'pop', COLORS.gold);
   }
   ctx.globalAlpha = 1;
 }
 
-function drawText(str, x, y, size, fill, align = 'center') {
-  ctx.font = '900 ' + size + 'px ' + FONT_FAMILY;
+/** Outlined cartoon text. `fontKey` names a size pre-built in layout() (no per-frame font strings). */
+function drawText(str, x, y, fontKey, fill, align = 'center') {
+  const f = L.fonts[fontKey];
+  ctx.font = f.str;
   ctx.textAlign = align; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2, size * 0.14); ctx.strokeStyle = '#1b1430';
+  ctx.lineWidth = Math.max(2, f.size * 0.14); ctx.strokeStyle = COLORS.ink;
   ctx.strokeText(str, x, y); ctx.fillStyle = fill; ctx.fillText(str, x, y);
 }
 
 function drawHUD() {
-  const s = L.safe, f = L.font;
+  const s = L.safe, hud = L.fonts.hud.size;
   if (G.state !== 'title') {
-    drawText(G.scoreStr, L.W / 2, s.t + 10, f.hud, '#fff');
-    drawText(G.bestStr, L.W / 2, s.t + 10 + f.hud * 1.1, f.best, '#ffe27a');
+    drawText(G.scoreStr, L.W / 2, s.t + 10, 'hud', '#fff');
+    drawText(G.bestStr, L.W / 2, s.t + 10 + hud * 1.1, 'best', COLORS.gold);
   }
   // mute toggle
   const m = L.mute, cx = m.x + m.s / 2, cy = m.y + m.s / 2;
@@ -634,56 +711,60 @@ function drawHUD() {
     ctx.beginPath(); ctx.arc(cx + 4, cy, 13, -0.9, 0.9); ctx.stroke();
   }
   // big FLIP button (the whole screen is the real tap target; this is affordance)
-  if (G.state === 'play' || G.state === 'title') {
+  if (L.showBtn && (G.state === 'play' || G.state === 'title')) {
     const b = L.btn, k = G.btnT > 0 ? G.btnT / 120 : 0, sc = 1 - 0.1 * k;
     const canFlip = !G.flip.active || (G.flip.turns === 1 && G.flip.t * 1000 <= CFG.DOUBLE_TAP_MS);
     ctx.save(); ctx.translate(b.x, b.y); ctx.scale(sc, sc); ctx.globalAlpha = canFlip ? 1 : 0.5;
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(0, 5, b.r, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#e82127'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TAU); ctx.fill();
-    ctx.lineWidth = 4; ctx.strokeStyle = '#1b1430'; ctx.stroke();
+    ctx.fillStyle = COLORS.red; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TAU); ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = COLORS.ink; ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, b.r * 0.78, -2.6, -0.6); ctx.stroke();
-    drawText('FLIP', 0, -L.font.btn * 0.58, L.font.btn, '#fff');
+    drawText('FLIP', 0, -L.fonts.btn.size * 0.58, 'btn', '#fff');
     ctx.restore();
   }
 }
 
 function drawTitle() {
-  const f = L.font, W = L.W, H = L.H;
-  const tx = L.portrait ? W / 2 : W * 0.66, ty = L.portrait ? H * 0.14 : L.safe.t + H * 0.1;
-  drawText('TESLA', tx, ty, f.title, '#fff');
-  drawText('FLIP', tx, ty + f.title * 0.95, f.title, '#e82127');
+  const W = L.W, H = L.H, title = L.titleSize, tap = L.fonts.tap.size, hint = L.fonts.hint.size;
+  const tx = L.portrait ? W / 2 : W * 0.66, ty = L.portrait ? H * 0.12 : L.safe.t + H * 0.08;
+  drawText('TESLA', tx, ty, 'title', '#fff');
+  drawText('FLIP', tx, ty + title * 0.95, 'title', COLORS.red);
   ctx.globalAlpha = 0.65 + 0.35 * Math.sin(G.time * 5);
-  drawText('TAP TO FLIP', tx, ty + f.title * 2.15, f.tap, '#ffe27a');
+  drawText('TAP TO FLIP', tx, ty + title * 2.15, 'tap', COLORS.gold);
   ctx.globalAlpha = 1;
-  const hy = ty + f.title * 2.15 + f.tap * 1.6;
-  drawText('TAP = KICKFLIP · DOUBLE TAP = DOUBLE FLIP', tx, hy, f.hint, '#e8e0ff');
-  drawText("DON'T HIT THE V8s", tx, hy + f.hint * 1.5, f.hint, '#e8e0ff');
-  if (G.best > 0) drawText(G.bestStr, W / 2, L.safe.t + 12, f.best, '#ffe27a');
+  const hy = ty + title * 2.15 + tap * 1.6;
+  if (!L.portrait) {   // hints sit over the buildings in landscape → translucent panel for legibility
+    const pw = hint * 24, ph = hint * 3.6;
+    ctx.fillStyle = 'rgba(27,20,48,0.6)'; roundRect(tx - pw / 2, hy - hint * 0.6, pw, ph, 12); ctx.fill();
+  }
+  drawText('TAP = KICKFLIP · DOUBLE TAP = DOUBLE FLIP', tx, hy, 'hint', COLORS.lilac);
+  drawText("DON'T HIT THE V8s", tx, hy + hint * 1.5, 'hint', COLORS.lilac);
+  if (G.best > 0) drawText(G.bestStr, W / 2, L.safe.t + 12, 'best', COLORS.gold);
 }
 
 function drawGameOver() {
-  const f = L.font, W = L.W, H = L.H;
-  const pw = Math.min(W * 0.84, 420), ph = f.panel * 4.6, px = (W - pw) / 2, py = Math.max(L.safe.t + f.hud * 1.7, H * 0.5 - ph / 2 - H * 0.05);
+  const W = L.W, H = L.H, u = L.panelUnit;
+  const pw = Math.min(W * 0.84, 420), ph = u * 4.6, px = (W - pw) / 2, py = Math.max(L.safe.t + L.fonts.hud.size * 1.7, H * 0.5 - ph / 2 - H * 0.05);
   ctx.fillStyle = 'rgba(27,20,48,0.86)'; roundRect(px, py, pw, ph, 22); ctx.fill();
-  ctx.lineWidth = 3; ctx.strokeStyle = '#e82127'; ctx.stroke();
+  ctx.lineWidth = 3; ctx.strokeStyle = COLORS.red; ctx.stroke();
   const cx = W / 2;
-  drawText('GAME OVER', cx, py + f.panel * 0.35, f.panel * 0.8, '#fff');
-  drawText('SCORE ' + G.scoreStr, cx, py + f.panel * 1.45, f.panelS, '#ffe27a');
-  drawText(G.newBest ? 'NEW BEST!' : G.bestStr, cx, py + f.panel * 2.15, f.panelS, G.newBest ? '#7cff9a' : '#e8e0ff');
+  drawText('GAME OVER', cx, py + u * 0.35, 'panel', '#fff');
+  drawText('SCORE ' + G.scoreStr, cx, py + u * 1.45, 'panelS', COLORS.gold);
+  drawText(G.newBest ? 'NEW BEST!' : G.bestStr, cx, py + u * 2.15, 'panelS', G.newBest ? '#7cff9a' : COLORS.lilac);
   ctx.globalAlpha = 0.65 + 0.35 * Math.sin(G.time * 5);
-  drawText('TAP TO RETRY', cx, py + f.panel * 3.2, f.panelS * 1.15, '#fff');
+  drawText('TAP TO RETRY', cx, py + u * 3.2, 'panelTap', '#fff');
   ctx.globalAlpha = 1;
 }
 
 function drawDebug() {
-  const cw = L.carW, f = G.flip;
-  const px1 = L.playerX - cw * 0.5 * (1 - CFG.PLAYER_SHRINK), px2 = L.playerX + cw * 0.5 * (1 - CFG.PLAYER_SHRINK);
-  const edgeOn = f.active ? (1 - Math.abs(Math.cos(f.theta))) * L.carH * 0.5 : 0;
-  const pBottom = L.groundY - f.cy - edgeOn - cw * 0.08;
+  const half = L.carW * 0.5 * (1 - CFG.PLAYER_SHRINK), pb = playerBottom();
   ctx.lineWidth = 2; ctx.strokeStyle = '#00ff88';
-  ctx.strokeRect(px1, pBottom - muskH() - L.carH, px2 - px1, muskH() + L.carH);
+  ctx.strokeRect(L.playerX - half, pb - muskH() - L.carH, half * 2, muskH() + L.carH);
   ctx.strokeStyle = '#ff3366';
-  for (const o of G.obstacles) if (o.alive) ctx.strokeRect(o.hx1, o.htop, o.hx2 - o.hx1, L.groundY - o.htop);
+  for (const o of G.obstacles) {
+    if (!o.alive) continue;
+    for (const b of CFG.HITBOX[o.kind]) ctx.strokeRect(o.x + o.w * b.x1, L.groundY - o.h * b.top, o.w * (b.x2 - b.x1), o.h * b.top);
+  }
 }
 
 function roundRect(x, y, w, h, r) {
@@ -729,8 +810,10 @@ function frame(ts) {
   if (!lastTs) lastTs = ts;
   let dt = (ts - lastTs) / 1000; lastTs = ts;
   if (dt > CFG.MAX_FRAME_DT) dt = CFG.MAX_FRAME_DT;
-  acc += dt;
-  while (acc >= CFG.FIXED_DT) { update(CFG.FIXED_DT); acc -= CFG.FIXED_DT; }
+  if (!G.paused) {
+    acc += dt;
+    while (acc >= CFG.FIXED_DT) { update(CFG.FIXED_DT); acc -= CFG.FIXED_DT; }
+  }
   render();
 }
 document.addEventListener('visibilitychange', () => {
@@ -750,5 +833,9 @@ document.addEventListener('visibilitychange', () => {
   });
 })();
 
-// Small hook for QA automation (state inspection / deterministic spawns). Harmless in production.
-window.TF = { G, L, CFG, SPR, tap: () => onTap(-1, -1), spawnObstacle, resetRun };
+// QA hook: state inspection, deterministic spawns and stepping (set TF.G.paused = true, then TF.step(n)).
+window.TF = {
+  G, L, CFG, SPR,
+  tap: () => onTap(-1, -1), spawnObstacle, resetRun,
+  step: (n = 1) => { for (let i = 0; i < n; i++) update(CFG.FIXED_DT); },
+};
